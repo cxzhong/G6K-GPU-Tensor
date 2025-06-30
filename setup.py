@@ -45,6 +45,6 @@ setup(
     version="0.0.1",
     ext_modules=cythonize(extensions, compiler_directives={'binding': True,
                                                            'embedsignature': True,
-                                                           'language_level': 2}),
+                                                           'language_level': 3}),
     packages=[],
 )
