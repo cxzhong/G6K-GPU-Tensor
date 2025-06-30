@@ -49,7 +49,7 @@ class SieveTreeTracer(Tracer):
 
         """
         node = self.current
-        node.data["cputime"]  = node.data.get("cputime",  0) + Accumulator(-time.clock(), repr="sum", count=False)
+        node.data["cputime"]  = node.data.get("cputime",  0) + Accumulator(-time.process_time(), repr="sum", count=False)
         node.data["walltime"] = node.data.get("walltime", 0) + Accumulator(-time.time(),  repr="sum", count=False)
 
     def exit(self, **kwds):
@@ -58,7 +58,7 @@ class SieveTreeTracer(Tracer):
         """
         node = self.current
 
-        node.data["cputime"] += time.clock()
+        node.data["cputime"] += time.process_time()
         node.data["walltime"] += time.time()
 
         self.instance.update_gso(0, self.instance.M.d)
