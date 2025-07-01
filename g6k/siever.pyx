@@ -28,7 +28,7 @@ from .decl cimport show_cpu_stats
 
 from scipy.special import betaincinv
 
-from siever_params import temp_params
+from .siever_params import temp_params
 
 from libc.math cimport NAN
 
@@ -1822,4 +1822,4 @@ cdef class Siever(object):
         return expectation
 
 # For backward compatibility with old pickles
-from siever_params import unpickle_params
+from .siever_params import unpickle_params
