@@ -1313,7 +1313,7 @@ cdef class Siever(object):
 
             if dual_vecs_yr.shape[0] == 0:
                 dual_vecs_yr = npp.zeros((dual_hash_vecs, k), dtype='float32')
-                print 'no dual vecs??', E.enumerate(hash_start, self.l, 100000000000000000.0, 0, dual=True)
+                print('no dual vecs??', E.enumerate(hash_start, self.l, 100000000000000000.0, 0, dual=True))
                 for i in xrange(0, dual_hash_vecs, k):
                     if i + k <= dual_hash_vecs:
                         dual_vecs_yr[i:i+k] = muinv.transpose()
@@ -1814,10 +1814,10 @@ cdef class Siever(object):
                 left = goal - rlen * right_gh
                 expectation = expectation + vecs*left**(self.l/2.) * ball_base/box
         except OverflowError as err:
-            print 'Overflowed after ', i, left, self.l, box, err
+            print('Overflowed after ', i, left, self.l, box, err)
             return 0.
         except:
-            print 'Other exception in db_lift_probability'
+            print('Other exception in db_lift_probability')
             return 0.
         return expectation
 
