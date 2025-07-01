@@ -1,3 +1,4 @@
+
 ******************************
 G6K - GPU Tensor
 ******************************
@@ -29,6 +30,7 @@ You will need the current master of FPyLLL and a recent version of the CUDA Tool
 
 .. code-block:: bash
 
+    sudo apt install libqd-dev    #support the float type qd and dd
     ./bootstrap.sh                # once only: creates local python env, builds fplll, fpylll and G6K
     source g6k-env/bin/activate   # for every new shell: activates local python env
     ./rebuild.sh -f -y            # whenever you want to rebuild G6K
@@ -39,7 +41,7 @@ Otherwise, you will need fplll and fpylll already installed and build the G6K Cy
 
     pip install Cython
     pip install -r requirements.txt
-    ./rebuild.sh -f -y
+    ./rebuild.sh -f -y # you also can use -m MAX_SIEVING_DIM
 
 Remove ``-f`` option to compile faster (fewer optimisations). 
 The ``-y`` option significantly reduces the memory footprint, but disables the standard cpu-only sieves. See ``rebuild.sh`` for more options.
