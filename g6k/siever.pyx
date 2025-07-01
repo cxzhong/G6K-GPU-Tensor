@@ -1545,8 +1545,8 @@ cdef class Siever(object):
         full_j = where(abs(v) == 1)[0][-1]
 
         if full_j < self.l:
-            print full_j, self.l
-            print v
+            print(full_j, self.l)
+            print(v)
             raise NotImplementedError('Can only handle vectors with +/- 1 in sieving context (have you deactivated param.unitary_only ?)')
 
         assert kappa <= self.l
