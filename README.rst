@@ -1,4 +1,4 @@
-
+Before Install you can use sudo apt install libqd-dev to support the float type qd and dd.
 ******************************
 G6K - GPU Tensor
 ******************************
@@ -30,7 +30,7 @@ You will need the current master of FPyLLL and a recent version of the CUDA Tool
 
 .. code-block:: bash
 
-    sudo apt install libqd-dev    #support the float type qd and dd
+    
     ./bootstrap.sh                # once only: creates local python env, builds fplll, fpylll and G6K
     source g6k-env/bin/activate   # for every new shell: activates local python env
     ./rebuild.sh -f -y            # whenever you want to rebuild G6K
