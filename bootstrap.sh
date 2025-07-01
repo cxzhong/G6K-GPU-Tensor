@@ -27,7 +27,7 @@ sleep 1
 
 rm -rf g6k-gpu-env
 $PYTHON -m virtualenv g6k-gpu-env
-cat <<EOF >>g6k-env/bin/activate
+cat <<EOF >>g6k-gpu-env/bin/activate
 ### LD_LIBRARY_HACK
 _OLD_LD_LIBRARY_PATH="\$LD_LIBRARY_PATH"
 LD_LIBRARY_PATH="\$VIRTUAL_ENV/lib:\$LD_LIBRARY_PATH"
@@ -55,21 +55,21 @@ export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 EOF
 
-if [ ! -d g6k-env ]; then
-	echo "Failed to create virtual environment in 'g6k-env' !"
+if [ ! -d g6k-gpu-env ]; then
+	echo "Failed to create virtual environment in 'g6k-gpu-env' !"
 	echo "Is '$PYTHON -m virtualenv' working?"
 	echo "Try '$PYTHON -m pip install virtualenv' otherwise."
 	exit 1
 fi
 
-ln -s g6k-env/bin/activate ./
-source g6k-env/bin/activate
+ln -s g6k-gpu-env/bin/activate ./
+source g6k-gpu-env/bin/activate
 
 $PIP install -U pip
 $PIP install Cython
 $PIP install cysignals
 
-cat <<EOF >>g6k-env/bin/activate
+cat <<EOF >>g6k-gpu-env/bin/activate
 CFLAGS="\$CFLAGS -O3 -march=native -Wp,-U_FORTIFY_SOURCE"
 CXXFLAGS="\$CXXFLAGS -O3 -march=native -Wp,-U_FORTIFY_SOURCE"
 export CFLAGS
@@ -77,7 +77,7 @@ export CXXFLAGS
 EOF
 
 deactivate
-source g6k-env/bin/activate
+source g6k-gpu-env/bin/activate
 
 
 # Install FPLLL
