@@ -25,8 +25,8 @@ echo "Using $jobs"
 sleep 1
 
 
-rm -rf g6k-env
-$PYTHON -m virtualenv g6k-env
+rm -rf g6k-gpu-env
+$PYTHON -m virtualenv g6k-gpu-env
 cat <<EOF >>g6k-env/bin/activate
 ### LD_LIBRARY_HACK
 _OLD_LD_LIBRARY_PATH="\$LD_LIBRARY_PATH"
