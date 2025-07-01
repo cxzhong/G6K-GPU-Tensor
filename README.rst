@@ -1,6 +1,7 @@
 ******************************
 G6K - GPU Tensor
 ******************************
+
 Before Install you can use sudo apt install libqd-dev to support the float type qd and dd.
 I finish tests on sm89 GPUs and make some errors fixs in Ubuntu 24.04, Cython 3.1.2, GCC13.3 and Python 3.13.3.
 
@@ -42,7 +43,7 @@ Otherwise, you will need fplll and fpylll already installed and build the G6K Cy
 
     pip install Cython
     pip install -r requirements.txt
-    ./rebuild.sh -f -y # you also can use -m MAX_SIEVING_DIM
+    ./rebuild.sh -f -y # you also can use -m MAX_SIEVING_DIM \leqslant 167
 
 Remove ``-f`` option to compile faster (fewer optimisations). 
 The ``-y`` option significantly reduces the memory footprint, but disables the standard cpu-only sieves. See ``rebuild.sh`` for more options.
