@@ -1264,7 +1264,7 @@ cdef class Siever(object):
             with tracer.context("gauss"):
                 self.gauss_sieve(reset_stats=reset_stats)
         elif alg == "gauss_no_upd":
-            print "--alg gauss_no_upd has been renamed into just --alg gauss. the gauss_no_upd option will be removed soon." #TODO: Remove this line. It just serves to spot issues gracefully.
+            print("--alg gauss_no_upd has been renamed into just --alg gauss. the gauss_no_upd option will be removed soon.") #TODO: Remove this line. It just serves to spot issues gracefully.
             with tracer.context("gauss"):
                 self.gauss_sieve(reset_stats=reset_stats)
         elif alg == "gauss_triple_st":  #Single-threaded 3Sieve
