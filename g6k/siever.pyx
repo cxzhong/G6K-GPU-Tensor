@@ -23,8 +23,8 @@ cimport numpy as np
 from fpylll import LLL, GSO, IntegerMatrix, Enumeration
 from math import ceil, floor, lgamma, gamma
 
-from decl cimport CompressedEntry, Entry
-from decl cimport show_cpu_stats
+from .decl cimport CompressedEntry, Entry
+from .decl cimport show_cpu_stats
 
 from scipy.special import betaincinv
 
