@@ -3,7 +3,7 @@ $(shell cd ..; ./rebuild.sh --onlyconf >/dev/null; cd kernel)
 endif
 include ../Makefile.local
 
-CXXFLAGS += -fPIC -Ofast -march=native -ftree-vectorize -funroll-loops -std=c++11 -pthread -Wall -Wextra $(EXTRAFLAGS) -I../parallel-hashmap
+CXXFLAGS += -fPIC -Ofast -march=native -ftree-vectorize -funroll-loops -std=c++14 -pthread -Wall -Wextra $(EXTRAFLAGS) -I../parallel-hashmap
 LDFLAGS += -shared -pthread -L$(realpath .) -Wl,-rpath=$(realpath .)
 LIBADD += -lpthread
 
@@ -18,7 +18,7 @@ endif
 SMS ?= 89
 CUDACXXFLAGS = -fPIC -Ofast -march=native -pthread -Wall -Wextra $(EXTRAFLAGS)
 NVCC_FLAGS += -ccbin $(CUDA_CXX) $(addprefix -Xcompiler ,$(CUDACXXFLAGS))
-NVCC_FLAGS += -std=c++11 -O3
+NVCC_FLAGS += -std=c++14 -O3
 OBJ += ../cuda/GPUStreamGeneral.o
 CXXFLAGS += $(CUDA_FLAGS)
 LIBADD += $(CUDA_LIBS)
