@@ -1,0 +1,13 @@
+name: my_gpu_env
+channels:
+  - defaults
+  - conda-forge
+  - nvidia
+dependencies:
+  - python=3.13
+  - numpy
+  - pandas
+  - cudatoolkit=12.8
+  - pip
+  - pip:
+    - -r requirements.txt # If you have additional pip dependencies13
