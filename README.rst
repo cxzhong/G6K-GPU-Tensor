@@ -3,7 +3,7 @@ G6K - GPU Tensor
 ******************************
 
 Before Install you can use sudo apt install libqd-dev to support the float type qd and dd.
-I finish tests on sm89 GPUs and make some errors fixs in Ubuntu 24.04, Cython 3.1.2, GCC13.3 and Python 3.13.3.
+I finish tests on sm89 GPUs and make some errors fixs in Ubuntu 24.04, Cython 3.1.2, GCC13.3, CUDA12.9 and Python 3.13.3.
 
 G6K is an open-source C++ and Python (2) library that implements several Sieve algorithms to be used in more advanced lattice reduction tasks. It follows the stateful machine framework from: 
 
