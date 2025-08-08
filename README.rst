@@ -1,5 +1,4 @@
-> :warning: **Update:** It is recommended to use the `python3_lwe <https://github.com/WvanWoerden/G6K-GPU-Tensor/tree/python3lwe>`__ branch which has support for python 3.
-
+> :warning: **Update:** It is recommended to use the dev branch to support lastest features.
 ******************************
 G6K - GPU Tensor
 ******************************
