@@ -1,4 +1,4 @@
-> :warning: **Update:** It is recommended to use the dev branch to support lastest features.
+> :warning: **Update:** It is recommended to use the dev branch.
 ******************************
 G6K - GPU Tensor
 ******************************
