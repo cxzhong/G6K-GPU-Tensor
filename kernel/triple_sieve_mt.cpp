@@ -1592,7 +1592,7 @@ size_t Siever::gauss_triple_mt_execute_delayed_insertion(TS_Transaction_DB_Type 
         assert(insertion_start_ptr != nullptr);
         assert(insertion_end_ptr != nullptr);
         assert(insertion_start_ptr <= insertion_end_ptr);
-        assert(insertion_end_ptr - insertion_start_ptr == insertion_size);
+        assert(static_cast<std::size_t>(insertion_end_ptr - insertion_start_ptr) == insertion_size);
 
         // We now perform step 3: Insertion into cdb:
         // We also have exclusive write access to the reserved portion of cdb.
@@ -1897,9 +1897,9 @@ void Siever::gauss_triple_mt_init_snapshots()
 
 void Siever::gauss_triple_mt_restore_cdb()
 {
-    auto const find_latest_snapshot = TS_latest_cdb_snapshot_p.load(std::memory_order_relaxed) - &TS_cdb_snapshots[0];
+    auto find_latest_snapshot = TS_latest_cdb_snapshot_p.load(std::memory_order_relaxed) - &TS_cdb_snapshots[0];
     assert(find_latest_snapshot >=0);
-    assert(static_cast<mystd::make_unsigned_t<decltype(find_latest_snapshot)>> (find_latest_snapshot) < TS_snapshots_used);
+    assert(static_cast<mystd::make_unsigned_t<decltype(find_latest_snapshot)>>(find_latest_snapshot) < TS_snapshots_used);
     assert(TS_snapshots_used <= TS_max_snapshots);
 
     TS_cdb_snapshots[0].snapshot.swap(TS_cdb_snapshots[find_latest_snapshot].snapshot);

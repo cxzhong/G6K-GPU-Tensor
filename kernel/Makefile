@@ -19,7 +19,7 @@ endif
 SMS ?= 89
 CUDACXXFLAGS = -fPIC -Ofast -march=native -pthread -Wall -Wextra $(EXTRAFLAGS)
 NVCC_FLAGS += -ccbin $(CUDA_CXX) $(addprefix -Xcompiler ,$(CUDACXXFLAGS))
-NVCC_FLAGS += -std=c++14 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca
+NVCC_FLAGS += -std=c++14 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca -diag-suppress 191
 OBJ += ../cuda/GPUStreamGeneral.o
 CXXFLAGS += $(CUDA_FLAGS)
 LIBADD += $(CUDA_LIBS)

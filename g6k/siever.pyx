@@ -166,7 +166,7 @@ cdef class Siever(object):
         if r_bound == -1:
             cr = self.full_n
         if not (0 <= l_bound and l_bound <= r_bound and r_bound <= self.M.d):
-            raise ValueError("Parameters %d, %d, %d do not satisfy constraint  0 <= l_bound <= r_bound <= self.M.d"%(l_bound, r_bound))
+            raise ValueError("Parameters %d, %d, %d do not satisfy constraint  0 <= l_bound <= r_bound <= self.M.d"%(l_bound, r_bound, self.M.d))
 
 
         cdef int i, j, k
