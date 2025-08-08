@@ -206,7 +206,7 @@ void Siever::gpu_bucketing_prepare( const size_t threads, const std::vector<size
     
     threadpool.run([this, chunks, &b_idxs, &q, bucket_seed](int th_i, int th_n)
         {
-            size_t streams = std::min( gpu_general[0].size(), static_cast<size_t>(chunks/th_n + (th_i < (chunks%th_n))));
+            size_t streams = std::min( gpu_general[0].size(), static_cast<size_t>(chunks/size_t(th_n) + (size_t(th_i) < (chunks%size_t(th_n)))));
             for( size_t s = 0; s < streams; ++s)
             {
                 gpu_general[th_i][s]->bind( db, cdb);
@@ -217,7 +217,7 @@ void Siever::gpu_bucketing_prepare( const size_t threads, const std::vector<size
  
 void Siever::gpu_bucketing_process_task( const size_t A, const size_t t_id, const size_t threads, const size_t chunk_size, const size_t vecs_per_local_part, std::vector<triple_bucket> &t_buckets) {
     size_t chunks = (A+chunk_size-1) / chunk_size;
-    size_t streams = std::min( gpu_general[0].size(), chunks/threads + (t_id < (chunks%threads )));
+    size_t streams = std::min( gpu_general[0].size(), chunks/threads + (size_t(t_id) < (chunks%threads )));
     
     for( size_t i = 0; i < streams; i++ ) {
         gpu_general[t_id][i]->bind(db, cdb);
@@ -307,9 +307,9 @@ void Siever::gpu_bucketing( const size_t A, size_t chunk_size, const std::vector
     // Merge results
     threadpool.run([this, nr_buckets, &buckets, &t_buckets, &bucketcenters, vecs_per_local_part](int t_id, int threads)
         {
-            for( size_t b = t_id; b < nr_buckets; b+=threads ) {
+            for( size_t b = size_t(t_id); b < nr_buckets; b+=size_t(threads) ) {
                 size_t bsize = 0;
-                for( size_t i = 0; i < threads; i++ ) {
+                for( size_t i = 0; i < size_t(threads); i++ ) {
                     t_buckets[i][b].size = std::min( t_buckets[i][b].size, uint32_t(vecs_per_local_part) );    
                     bsize += t_buckets[i][b].size;
                 }
@@ -320,7 +320,7 @@ void Siever::gpu_bucketing( const size_t A, size_t chunk_size, const std::vector
                 buckets[b].b_len = cdb[bucketcenters[b]].len;
                 
                 size_t index = 0;
-                for( size_t i = 0; i < threads; i++ ) {
+                for( size_t i = 0; i < size_t(threads); i++ ) {
                     std::copy( t_buckets[i][b].indices, t_buckets[i][b].indices + t_buckets[i][b].size, buckets[b].indices+index );
                     std::copy( t_buckets[i][b].ips, t_buckets[i][b].ips + t_buckets[i][b].size, buckets[b].ips+index );
                     index += t_buckets[i][b].size;    
@@ -975,7 +975,7 @@ void Siever::gpu_sieve() {
             size_t results_pairs = 0;
             size_t results_triples = 0;
             size_t results_pairs_lifts = 0;
-            for( size_t i = 0; i < threads; i++ ) {
+            for( size_t i = 0; i < size_t(threads); i++ ) {
                 results_pairs += t_queue[i].sieve_pairs.size(); 
                 results_triples += t_queue[i].sieve_triples.size();
                 results_pairs_lifts += t_queue[i].lift_pairs.size() + t_queue[i].lifted_pairs;

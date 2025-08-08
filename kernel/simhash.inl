@@ -5,6 +5,10 @@
 #error Do not include siever.inl directly
 #endif
 
+#ifdef __CUDACC__
+#pragma nv_diag_suppress 186
+#endif
+
 // choose the vectors sparse vectors r_i for the compressed representation
 inline void SimHashes::reset_compress_pos(Siever const &siever)
 {

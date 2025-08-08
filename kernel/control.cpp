@@ -436,7 +436,7 @@ void Siever::gso_update_postprocessing(const unsigned int l_, const unsigned int
 
     initialize_local(ll, l_, r_);
 
-    double time_context_change = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_context_change = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
 
     std::vector<std::array<ZT,MAX_SIEVING_DIM>> MT;
@@ -458,7 +458,7 @@ void Siever::gso_update_postprocessing(const unsigned int l_, const unsigned int
         recompute_data_for_entry<Recompute::recompute_all_and_consider_otf_lift>(e);
     }
     
-    double time_recompute_lifts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_recompute_lifts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
 
     auto task = &Siever::gso_update_postprocessing_task<-1>;
@@ -474,11 +474,11 @@ void Siever::gso_update_postprocessing(const unsigned int l_, const unsigned int
     }
     threadpool.wait_work();
     
-    double time_xtransform = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_xtransform = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
 
-    double time_recompute = 0.;
-    double time_lift = 0.;
+    MAYBE_UNUSED double time_recompute = 0.;
+    MAYBE_UNUSED double time_lift = 0.;
     if( NOYR ) {
         gpu_recompute( cdb.size(), params.threads );
      
@@ -499,7 +499,7 @@ void Siever::gso_update_postprocessing(const unsigned int l_, const unsigned int
     invalidate_histo();
     refresh_db_collision_checks();
 
-    double time_refresh = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_refresh = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
 
     // std::cerr << std::setprecision(2) << "Postprocessing times: "
     //           << time_context_change/1000000 << " "

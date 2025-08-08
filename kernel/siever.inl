@@ -5,6 +5,10 @@
 #error Do not include siever.inl directly
 #endif
 
+#ifdef __CUDACC__
+#pragma nv_diag_suppress 186
+#endif
+
 #include "parallel_algorithms.hpp"
 namespace pa = parallel_algorithms;
 

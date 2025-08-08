@@ -537,7 +537,7 @@ void Siever::gauss_triple_mt_task(TS_Transaction_DB_Type &transaction_db, MAYBE_
     // These values do not change during the algorithm.
     auto const n = this->n;
     double const alpha_square = alpha * alpha;
-    size_t const db_size = db.size();
+    MAYBE_UNUSED size_t const db_size = db.size();
 
     // This contains the bucket elements of the current run. Note that we put no limit on its size.
     // (It is bounded by db_size, though). We also do not preallocate. Should we?
@@ -1498,10 +1498,11 @@ size_t Siever::gauss_triple_mt_execute_delayed_insertion(TS_Transaction_DB_Type 
                 // If TS_queue_left is positive after decrementing it, the PRE-reservation is deemed successful.
                 auto const old_queue_left = TS_queue_left.fetch_sub(insertion_size, std::memory_order_relaxed);
                 static_assert(std::is_signed<decltype(old_queue_left)>::value, "TS_queue_left must be signed"); // just to be sure.
+                using old_queue_t = std::remove_cv_t<decltype(old_queue_left)>;
 
                 // In this case, the new value old_queue_left - insertion_size is small, and we have to back off from
                 // some insertions and pre-reservations.
-                if(old_queue_left < static_cast<std::remove_reference_t<decltype(old_queue_left)>>(insertion_size + TS_max_extra_queue_size))
+                if(old_queue_left < static_cast<old_queue_t>(insertion_size + TS_max_extra_queue_size))
                 {
                     if(old_queue_left <= 0) // no more queue left, abort. We do not trigger sorting ourselves.
                     {
@@ -1513,7 +1514,7 @@ size_t Siever::gauss_triple_mt_execute_delayed_insertion(TS_Transaction_DB_Type 
                     assert(old_queue_left > 0);
                     assert(insertion_size > 0);
 
-                    if(old_queue_left > TS_max_extra_queue_size)
+                    if(old_queue_left > static_cast<old_queue_t>(TS_max_extra_queue_size))
                     {
                         // Reduce the insertion size, such that TS_queue_left hits TS_max_extra_queue_size if we had
                         // decremented TS_queue_left by that value. We add back to TS_queue_left accordingly.
@@ -1621,7 +1622,7 @@ size_t Siever::gauss_triple_mt_execute_delayed_insertion(TS_Transaction_DB_Type 
             insertion_end_ptr[-i].c   = transactions_end_it[-i].c;
             auto const db_insert = insertion_end_ptr[-i].i;
             db_insertion_positions[i-1] = db_insert;
-            for(int t = 0; t < (sizeof(Entry) + 63) / 64; ++t)
+            for(size_t t = 0; t < (sizeof(Entry) + 63) / 64; ++t)
             {
                 PREFETCH3(reinterpret_cast<char*>(db.data()+db_insert) + 64*t, 1,0 );
             }
@@ -1710,7 +1711,7 @@ cleanup:
 // Here, p is the point among the triple that is from the queue.
 // p may have negative length, which indicates that the algorithm has finished. In this case, the size_t element is meaningless.
 // thread_local_snapshot is the latest CDB snapshot the calling thread knows about, which is also updated.
-std::pair<Entry, size_t> Siever::gauss_triple_mt_get_p(TS_CDB_Snapshot * &thread_local_snapshot, unsigned int const id, TS_Transaction_DB_Type &transaction_db, float &update_len_bound)
+std::pair<Entry, size_t> Siever::gauss_triple_mt_get_p(TS_CDB_Snapshot * &thread_local_snapshot, unsigned int const id, TS_Transaction_DB_Type &transaction_db, float &/*update_len_bound*/)
 {
     ATOMIC_CPUCOUNT(604);
     std::pair<Entry, size_t> return_pair; // return value

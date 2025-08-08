@@ -5,6 +5,10 @@
 #error Do not include siever.inl directly
 #endif
 
+#ifdef __CUDACC__
+#pragma nv_diag_suppress 186
+#endif
+
 // Insert e in db and in cdb, NOT thread-safe
 inline void Siever::insert_in_db(Entry &&e)
 {
