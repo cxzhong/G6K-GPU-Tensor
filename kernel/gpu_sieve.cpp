@@ -193,10 +193,10 @@ void Siever::gpu_bucketing_prepare( const size_t threads, const std::vector<size
             }
         }
 
-        for( int i = 0; i < n; i++ ) {
-            for( int j = 0; j < n; j++ ) {
+        for( size_t i = 0; i < n; i++ ) {
+            for( size_t j = 0; j < n; j++ ) {
                 double tmp = 0.;
-                for( int k = 0; k < n; k++ ) {
+                for( size_t k = 0; k < n; k++ ) {
                     tmp += orth[n*i+k] * mu_R[k][j];
                 }
                 q[n*i+j] = tmp;
@@ -206,7 +206,7 @@ void Siever::gpu_bucketing_prepare( const size_t threads, const std::vector<size
     
     threadpool.run([this, chunks, &b_idxs, &q, bucket_seed](int th_i, int th_n)
         {
-            size_t streams = std::min( gpu_general[0].size(), chunks/th_n + (th_i < (chunks%th_n)));
+            size_t streams = std::min( gpu_general[0].size(), static_cast<size_t>(chunks/th_n + (th_i < (chunks%th_n))));
             for( size_t s = 0; s < streams; ++s)
             {
                 gpu_general[th_i][s]->bind( db, cdb);
@@ -619,16 +619,16 @@ bool Siever::gpu_sieve_replace_in_db(size_t cdb_index, const Entry &e){
     return true;
 }
 
-void Siever::gpu_sieve_replace( const size_t t_id, const size_t threads, std::deque<Entry> &transaction_db, size_t &min_i_index ) {
-    int64_t i_index = min_i_index;
+void Siever::gpu_sieve_replace( const size_t /*t_id*/, const size_t threads, std::deque<Entry> &transaction_db, size_t &min_i_index ) {
+    int64_t i_index = static_cast<int64_t>(min_i_index);
     int64_t t_index = 0;
-    for(; !transaction_db.empty() && i_index >= threads; ++t_index)
+    for(; !transaction_db.empty() && i_index >= static_cast<int64_t>(threads); ++t_index)
     {
         if( gpu_sieve_replace_in_db( i_index, transaction_db.front() ))
             i_index -= threads;
         transaction_db.pop_front();
     }
-    min_i_index = size_t(i_index);    
+    min_i_index = static_cast<size_t>(i_index);
     transaction_db.clear();
 }
 
@@ -759,7 +759,7 @@ void Siever::gpu_sieve() {
     size_t threads = params.threads;
     const size_t multi_bucket = params.multi_bucket;
     const size_t max_nr_buckets = automaxbuckets(params.max_nr_buckets, db.size());
-    double lenbound_ratio = params.lenbound_ratio;
+    MAYBE_UNUSED double lenbound_ratio = params.lenbound_ratio;
     size_t A = size_t(0.5 * db.size());
     A -= (A%256);
     assert( cdb.size() == uid_hash_table.hash_table_size() );

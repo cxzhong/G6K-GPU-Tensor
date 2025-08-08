@@ -64,7 +64,7 @@ inline CompressedVector SimHashes::compress(std::array<LFT,YR_DIM> const &v) con
     ATOMIC_CPUCOUNT(260);
     CompressedVector c = {};
     if (n < 30) return c;
-    for (size_t j = 0; j < XPC_WORD_LEN; ++j)
+    for (size_t j = 0; j < static_cast<size_t>(XPC_WORD_LEN); ++j)
     {
         uint64_t c_tmp = 0;
         LFT a = 0;

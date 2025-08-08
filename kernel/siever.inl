@@ -93,7 +93,7 @@ inline bool Siever::is_reducible_maybe(const uint64_t *left, const uint64_t *rig
 
     // No idea if this makes a difference, mirroring previous code
     unsigned wa = unsigned(0) - THRESHOLD;
-    for (size_t k = 0; k < XPC_WORD_LEN; ++k)
+    for (size_t k = 0; k < static_cast<size_t>(XPC_WORD_LEN); ++k)
     {
         // NOTE return type of __builtin_popcountl is int not unsigned int
         wa += __builtin_popcountl(left[k] ^ right[k]);
@@ -121,7 +121,7 @@ inline bool Siever::is_far_away(const uint64_t *left, const uint64_t *right)
         return true;
 
     unsigned w = unsigned(0);
-    for (size_t k = 0; k < XPC_WORD_LEN; ++k)
+    for (size_t k = 0; k < static_cast<size_t>(XPC_WORD_LEN); ++k)
     {
         // NOTE return type of __builtin_popcountl is int not unsigned int
         w += __builtin_popcountl(left[k] ^ right[k]);

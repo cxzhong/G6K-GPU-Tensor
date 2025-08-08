@@ -166,7 +166,7 @@ void Siever::initialize_local(unsigned int ll_, unsigned int l_, unsigned int r_
 
             if (!params.lift_unitary_only) continue;
             bool unitary=false;
-            for (int i = l_; i < r_; ++i)
+            for (unsigned int i = l_; i < r_; ++i)
             {
                 unitary |= abs(bl.x[i])==1;
             }
@@ -182,12 +182,12 @@ void Siever::initialize_local(unsigned int ll_, unsigned int l_, unsigned int r_
         best_lifts_so_far.resize(l_+1);
     }
 
-    for (int i = 0; i < ll; ++i)
+    for (unsigned int i = 0; i < ll; ++i)
     {
         assert(best_lifts_so_far[i].len == 0);
     }
 
-    for (int i = ll; i < ll_; ++i)
+    for (unsigned int i = ll; i < ll_; ++i)
     {
         best_lifts_so_far[i].x.clear();
         best_lifts_so_far[i].len = 0;
@@ -199,13 +199,13 @@ void Siever::initialize_local(unsigned int ll_, unsigned int l_, unsigned int r_
     n = r_ - l_;
     ll = ll_;
 
-    double time_best_lifts_so_far = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_best_lifts_so_far = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
 
     // std::fill(histo.begin(), histo.end(), 0);
     invalidate_histo();
 
-    double time_invalidate_histo = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_invalidate_histo = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
 
     //mu.resize(n);
@@ -241,20 +241,20 @@ void Siever::initialize_local(unsigned int ll_, unsigned int l_, unsigned int r_
         sqrt_rr[i] = std::sqrt(rr[i]);
     }
 
-    double time_mu_and_gh = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_mu_and_gh = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
     set_lift_bounds();
-    double time_lift_bounds = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_lift_bounds = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
     sim_hashes.reset_compress_pos(*this);
-    double time_simhash_reset = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_simhash_reset = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
     uid_hash_table.reset_hash_function(*this);
-    double time_uid_reset = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_uid_reset = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
     invalidate_sorting();
 
-    double time_invalidate_sorting = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_invalidate_sorting = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
     start_time = std::chrono::steady_clock::now();
 
     // invalidate dual hash
@@ -266,7 +266,7 @@ void Siever::initialize_local(unsigned int ll_, unsigned int l_, unsigned int r_
         global_init_gpus();
     }
 
-    double time_gpu_init = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
+    MAYBE_UNUSED double time_gpu_init = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();  
 
     // std::cerr << std::setprecision(2) << "init_local times: " 
     //           << time_best_lifts_so_far/1000000 << " " 

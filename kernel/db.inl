@@ -40,6 +40,7 @@ inline bool Siever::insert_in_db_and_uid(std::array<ZT,MAX_SIEVING_DIM> &x)
 
 inline bool Siever::verify_integrity(bool test_bijection)
 {
+    (void)test_bijection; // parameter may be unused depending on compile-time flags
     bool ret = true;
     size_t const db_size = db.size();
     if(cdb.size() != db_size) { std::cerr << "FATAL: cdb size and db size do not match.\n"; return false; }
@@ -153,7 +154,7 @@ Entry Siever::sample(unsigned int large)
     {
         ++j;
         unsigned int w = 0;
-        for (size_t k = 0; k < XPC_WORD_LEN; ++k)
+        for (size_t k = 0; k < static_cast<size_t>(XPC_WORD_LEN); ++k)
         {
             w += __builtin_popcountl(fast_cdb[i].c[k] ^ fast_cdb[j].c[k]);
         }
@@ -267,7 +268,7 @@ inline void Siever::statistics_lift_hash( unsigned int N, float* liftlen, float*
         // lift length
         double len = 0.;
         int i = int(l)-1;
-        for (size_t k = 0; k < OTF_LIFT_HELPER_DIM; ++k, --i)
+        for (size_t k = 0; k < static_cast<size_t>(OTF_LIFT_HELPER_DIM); ++k, --i)
         {
             FT yi = std::inner_product(x_full+l-k, x_full+l, full_muT[i].cbegin()+l-k,  static_cast<FT>(helper[k]));
             int const c = -std::floor(yi+0.5);

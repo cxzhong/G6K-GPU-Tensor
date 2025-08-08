@@ -190,7 +190,7 @@ class UidHashTable
 {
 public:
     // creates a dummy hash table. Note that reset_hash_function has to be called at least once before it can be used.
-  explicit UidHashTable() : db_uid(), n(0), uid_coeffs(), reserve_size(0)
+  explicit UidHashTable() : uid_coeffs(), db_uid(), db_mut(), n(0), reserve_size(0)
   {
     insert_uid(0);
   }
@@ -521,7 +521,7 @@ public:
     */
 
     explicit Siever(const SieverParams &params, unsigned long int seed = 0) :
-        full_n(0), full_muT(), full_rr(), l(0), r(-1), n(0), ll(0), muT(), db(), cdb(),
+        full_n(0), full_muT(), full_rr(), ll(0), l(0), r(0), n(0), muT(), db(), cdb(),
         best_lifts_so_far(), histo(),
         rng(seed), sim_hashes(rng.rng_nolock()), dual_hashes()
 #ifdef PERFORMANCE_COUNTING

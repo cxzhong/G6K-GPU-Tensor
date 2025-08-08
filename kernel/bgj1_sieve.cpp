@@ -172,7 +172,9 @@ void Siever::bgj1_sieve_task(double alpha)
                     statistics.dec_stats_fullscprods_outer();
                     continue;
                 }
-                LFT const inner = std::inner_product(yr1.begin(), yr1.begin()+(tn < 0 ? n : tn), db[fast_cdb[j].i].yr.begin(),  static_cast<LFT>(0.));
+            // Clamp the upper bound to the available dimension n to avoid potential UB in debug analyzers
+            const size_t upper = static_cast<size_t>(tn < 0 ? n : std::min<int>(tn, n));
+            LFT const inner = std::inner_product(yr1.begin(), yr1.begin()+upper, db[fast_cdb[j].i].yr.begin(),  static_cast<LFT>(0.));
 
                 // Test for reduction while bucketing.
                 LFT const new_l = aux.len + fast_cdb[j].len - 2 * std::abs(inner);
@@ -282,7 +284,14 @@ inline bool Siever::bgj1_reduce_with_delayed_replace(CompressedEntry const &ce1,
     constexpr bool reduce_while_bucketing = true; // The actual value does not matter.
 #endif
     // statistics.inc_fullscprods done at call site
-    LFT const inner = std::inner_product(db[ce1.i].yr.cbegin(), db[ce1.i].yr.cbegin()+(tn < 0 ? n : tn), db[ce2.i].yr.cbegin(), static_cast<LFT>(0.));
+    // When NOYR=1 the yr-dimension may be 0; avoid iterating over yr in that case
+#if NOYR
+    constexpr size_t upper = 0;
+#else
+    const size_t upper = static_cast<size_t>(tn < 0 ? n : std::min<int>(tn, n));
+#endif
+    LFT const inner = std::inner_product(db[ce1.i].yr.cbegin(), db[ce1.i].yr.cbegin()+upper,
+                                         db[ce2.i].yr.cbegin(), static_cast<LFT>(0.));
     LFT const new_l = ce1.len + ce2.len - 2 * std::abs(inner);
     int const sign = inner < 0 ? 1 : -1;
 

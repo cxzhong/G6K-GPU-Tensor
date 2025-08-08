@@ -355,8 +355,8 @@ namespace parallel_algorithms {
 		{
 			assert(first <= nth && nth < last);
 			
-			difference_type dist = last - first;
-			if (dist <= chunksize*4)
+            difference_type dist = last - first;
+            if (dist <= static_cast<difference_type>(chunksize*4))
 			{
 				std::nth_element(first, nth, last, cf);
 				return;
@@ -364,10 +364,10 @@ namespace parallel_algorithms {
 
 			// select a small constant number of elements
 			const std::size_t selectionsize = 7;
-			assert(selectionsize <= dist);
+            assert(static_cast<difference_type>(selectionsize) <= dist);
 			RandIt selit = first;
 			for (std::size_t i = 0; i < selectionsize; ++i,++selit)
-				std::iter_swap(selit, first + (rand()%dist));
+                std::iter_swap(selit, first + (rand()%static_cast<unsigned>(dist)));
 			std::sort(first, selit, cf);
 			
 			// pick median as pivot and move to end

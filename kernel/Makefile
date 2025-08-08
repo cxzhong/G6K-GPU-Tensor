@@ -15,10 +15,11 @@ ifeq ($(HAVE_CUDA),1)
 ifeq ($(CUDA_CXX),)
 CUDA_CXX=$(CXX)
 endif
+# Default to Ada (SM 89) if not specified; override via `make SMS="80 89"`
 SMS ?= 89
 CUDACXXFLAGS = -fPIC -Ofast -march=native -pthread -Wall -Wextra $(EXTRAFLAGS)
 NVCC_FLAGS += -ccbin $(CUDA_CXX) $(addprefix -Xcompiler ,$(CUDACXXFLAGS))
-NVCC_FLAGS += -std=c++14 -O3
+NVCC_FLAGS += -std=c++14 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca
 OBJ += ../cuda/GPUStreamGeneral.o
 CXXFLAGS += $(CUDA_FLAGS)
 LIBADD += $(CUDA_LIBS)

@@ -158,6 +158,7 @@ bool Siever::order_and_reduce_triple(CompressedEntry* ce1, FilteredCompressedEnt
     }
     // should not be reached
     assert(false); // __builtin_unreachable;
+    return false;
 }
 
 

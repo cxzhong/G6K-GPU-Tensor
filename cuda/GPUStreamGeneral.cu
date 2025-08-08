@@ -40,7 +40,7 @@ using namespace nvcuda;
 
 // Fully coalesced memory loads and stores
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
-__global__ void kernel_float_to_8bit( const float* Y, dhtype* Yint8, const uint32_t DIM ) {
+__global__ void kernel_float_to_8bit( const float* __restrict__ Y, dhtype* __restrict__ Yint8, const uint32_t DIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
 
     const uint32_t Ystart = ROWS_PER_BLOCK * DIM * blockIdx.x;
@@ -50,7 +50,7 @@ __global__ void kernel_float_to_8bit( const float* Y, dhtype* Yint8, const uint3
 
     int* Yint8ptr = (int*)(Yint8 + Ystart) + threadIdx.x;
 
-    __syncthreads();
+    // no shared memory used; avoid unnecessary barrier
 
     for( ; Yptr < Yptr_end; Yptr += WARP_SIZE, Yint8ptr += WARP_SIZE) {
         float regs[4];
@@ -67,7 +67,7 @@ __global__ void kernel_float_to_8bit( const float* Y, dhtype* Yint8, const uint3
 
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
 template< uint32_t DIM>
-__global__ void kernel_float_to_8bit_transpose( const float* Y, dhtype* Yint8 ) {
+__global__ void kernel_float_to_8bit_transpose( const float* __restrict__ Y, dhtype* __restrict__ Yint8 ) {
     const uint32_t ROWS_PER_BLOCK = 32;
 
     const uint32_t Ystart = ROWS_PER_BLOCK * DIM * blockIdx.x;
@@ -101,7 +101,7 @@ __global__ void kernel_float_to_8bit_transpose( const float* Y, dhtype* Yint8 ) 
 }
 
 // Call with vecs/ROWS_PER_BLOCK blocks with 32 threads each
-__global__ void __launch_bounds__(32) X_to_Xfloat( const int16_t* X, float* Xfloat, const uint32_t VECDIM ) {
+__global__ void __launch_bounds__(32) X_to_Xfloat( const int16_t* __restrict__ X, float* __restrict__ Xfloat, const uint32_t VECDIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
     const uint32_t SHORTS_PER_FLOAT2 = 4;
 
@@ -125,7 +125,7 @@ __global__ void __launch_bounds__(32) X_to_Xfloat( const int16_t* X, float* Xflo
 // Converts X to Xhalf and negates depending on the sign of the corresponding ip
 // Fully coalesced memory loads and stores
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
-__global__ void kernel_X_to_Xhalf_negate( const int16_t* X, const half* ips, half* Xhalf, const uint32_t VECDIM ) {
+__global__ void kernel_X_to_Xhalf_negate( const int16_t* __restrict__ X, const half* __restrict__ ips, half* __restrict__ Xhalf, const uint32_t VECDIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
     const uint32_t SHORTS_PER_FLOAT4 = 8;
 
@@ -158,7 +158,7 @@ __global__ void kernel_X_to_Xhalf_negate( const int16_t* X, const half* ips, hal
 // Converts X to Xhalf and normalizes the length
 // Fully coalesced memory loads and stores
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
-__global__ void kernel_X_to_Xhalf_normalize( const int16_t* X, const lentype* Xlen, half* Xhalf, const uint32_t VECDIM ) {
+__global__ void kernel_X_to_Xhalf_normalize( const int16_t* __restrict__ X, const lentype* __restrict__ Xlen, half* __restrict__ Xhalf, const uint32_t VECDIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
     const uint32_t SHORTS_PER_FLOAT4 = 8;
 
@@ -191,7 +191,7 @@ __global__ void kernel_X_to_Xhalf_normalize( const int16_t* X, const lentype* Xl
 
 // Converts X to Xhalf
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
-__global__ void kernel_X_to_Xhalf( const int16_t* X, half* Xhalf, const uint32_t VECDIM ) {
+__global__ void kernel_X_to_Xhalf( const int16_t* __restrict__ X, half* __restrict__ Xhalf, const uint32_t VECDIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
     const uint32_t SHORTS_PER_FLOAT4 = 8;
 
@@ -213,7 +213,7 @@ __global__ void kernel_X_to_Xhalf( const int16_t* X, half* Xhalf, const uint32_t
 }
 
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
-__global__ void kernel_float_to_half( const float* in, half* out, const uint32_t VECDIM ) {
+__global__ void kernel_float_to_half( const float* __restrict__ in, half* __restrict__ out, const uint32_t VECDIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
 
     float4* Xptr = ((float4*)(in + ROWS_PER_BLOCK * VECDIM * blockIdx.x)) + threadIdx.x;
@@ -236,7 +236,7 @@ __global__ void kernel_float_to_half( const float* in, half* out, const uint32_t
 // Converts X to Xfloat
 // Fully coalesced memory loads and stores
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
-__global__ void kernel_X_to_Xfloat( const int16_t* X, float* Xfloat, const uint32_t VECDIM ) {
+__global__ void kernel_X_to_Xfloat( const int16_t* __restrict__ X, float* __restrict__ Xfloat, const uint32_t VECDIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
     const uint32_t SHORTS_PER_FLOAT4 = 8;
 
@@ -246,7 +246,7 @@ __global__ void kernel_X_to_Xfloat( const int16_t* X, float* Xfloat, const uint3
     const float4* Xptr_end = (float4*)(X + Xstart + ROWS_PER_BLOCK * VECDIM);
     float4* Xfloatptr = ((float4*)(Xfloat + Xstart)) + 2 * threadIdx.x;
 
-    __syncthreads();
+    // no shared memory used; avoid unnecessary barrier
 
     uint32_t k = SHORTS_PER_FLOAT4*threadIdx.x;
     for( ; Xptr < Xptr_end; Xptr += WARP_SIZE, Xfloatptr += 2*WARP_SIZE, k+=SHORTS_PER_FLOAT4*WARP_SIZE ) {
@@ -268,7 +268,7 @@ __global__ void kernel_X_to_Xfloat( const int16_t* X, float* Xfloat, const uint3
 // Converts X to Xfloat and normalizes the length
 // Fully coalesced memory loads and stores
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
-__global__ void kernel_X_to_Xfloat_normalize( const int16_t* X, const lentype* Xlen, float* Xfloat, const uint32_t VECDIM ) {
+__global__ void kernel_X_to_Xfloat_normalize( const int16_t* __restrict__ X, const lentype* __restrict__ Xlen, float* __restrict__ Xfloat, const uint32_t VECDIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
     const uint32_t SHORTS_PER_FLOAT4 = 8;
 
@@ -302,7 +302,7 @@ __global__ void kernel_X_to_Xfloat_normalize( const int16_t* X, const lentype* X
 // Converts X to Xfloat and normalizes the sign
 // Fully coalesced memory loads and stores
 // Call with vecs/VECS_PER_BLOCK blocks with 32 threads each
-__global__ void kernel_X_to_Xfloat_negate( const int16_t* X, const iptype* Xip, float* Xfloat, const uint32_t VECDIM ) {
+__global__ void kernel_X_to_Xfloat_negate( const int16_t* __restrict__ X, const iptype* __restrict__ Xip, float* __restrict__ Xfloat, const uint32_t VECDIM ) {
     const uint32_t ROWS_PER_BLOCK = 32;
     const uint32_t SHORTS_PER_FLOAT4 = 8;
 
@@ -336,7 +336,7 @@ __global__ void kernel_X_to_Xfloat_negate( const int16_t* X, const iptype* Xip, 
 
 // Prepare lengths and ips for wmma_sieve2
 // call with vecs/128 with 32 threads each
-__global__ void kernel_prepare_len_and_ips( const lentype* len_in, iptype* ips, half* len_out, float lenbound, float b_len ) {
+__global__ void kernel_prepare_len_and_ips( const lentype* __restrict__ len_in, iptype* __restrict__ ips, half* __restrict__ len_out, float lenbound, float b_len ) {
     const int items_per_float4 = 4;
     static_assert( sizeof(lentype) == 4 );
     const uint32_t Xstart = 128 * blockIdx.x;
@@ -1701,7 +1701,7 @@ void kernel_triple_sieve(half* a, const half* len, const half* ips, const uint32
 template<uint32_t n_>
 __global__ void kernel_dualhash( const uint* A, const uint lenbound, indextype* lift_indices, indextype* nr_results ) { 
     
-    const uint32_t BL = 4;
+    // const uint32_t BL = 4; // unused
     const uint32_t BLH = 128;
     const uint32_t BLW = 64;
     const uint32_t TH = 8;
@@ -2833,7 +2833,7 @@ void GPUStreamGeneral::P_receive_data( queues &queue, bool onlyprocess) {
                 const indextype* bucket_indices = onlyprocess ? curr_bucket->indices : prev_bucket->indices;
                 const iptype* bucket_ips = onlyprocess ? curr_bucket->ips : prev_bucket->ips;
                 const indextype b_index = onlyprocess ? curr_bucket->b_db_index : prev_bucket->b_db_index;
-                const auto b_size = onlyprocess ? curr_bucket->size : prev_bucket->size;
+                // const auto b_size = onlyprocess ? curr_bucket->size : prev_bucket->size; // unused
 
                 if( host_nr_results[0] > max_results ) {
                     std::cerr << "Result overflow " << host_nr_results[0] << std::endl;

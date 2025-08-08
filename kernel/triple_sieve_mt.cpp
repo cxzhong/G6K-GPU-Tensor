@@ -307,7 +307,7 @@ void Siever::gauss_triple_mt(double alpha)
     }
     status_data.gauss_data.reducedness = 3;
 
-    size_t const db_size = db.size();
+    MAYBE_UNUSED size_t const db_size = db.size();
 
     assert(status_data.gauss_data.queue_start <= db_size);
 
@@ -1299,7 +1299,7 @@ size_t Siever::gauss_triple_mt_execute_delayed_insertion(TS_Transaction_DB_Type 
         // We will (eventually) insert into *insertion_start_ptr, ..., *insertion_end_ptr (right bound is EXCLUSIVE)
         // number of insertions is insertion_size. Note that if insertion_size == 0, the pointers are meaningless.
         // If we count from the right, we go insertion_end_ptr[-1], ..., insertion_end_ptr[-insertion_size] (inclusive)
-        CompressedEntry * insertion_start_ptr = nullptr;
+        MAYBE_UNUSED CompressedEntry * insertion_start_ptr = nullptr;
         CompressedEntry * insertion_end_ptr   = nullptr;
         bool choose_queue_to_insert; // indicates whether we insert into the list or the queue.
 
@@ -1501,7 +1501,7 @@ size_t Siever::gauss_triple_mt_execute_delayed_insertion(TS_Transaction_DB_Type 
 
                 // In this case, the new value old_queue_left - insertion_size is small, and we have to back off from
                 // some insertions and pre-reservations.
-                if(old_queue_left < static_cast<decltype(old_queue_left)> (insertion_size + TS_max_extra_queue_size))
+                if(old_queue_left < static_cast<std::remove_reference_t<decltype(old_queue_left)>>(insertion_size + TS_max_extra_queue_size))
                 {
                     if(old_queue_left <= 0) // no more queue left, abort. We do not trigger sorting ourselves.
                     {
