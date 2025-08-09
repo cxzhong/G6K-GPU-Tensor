@@ -13,9 +13,9 @@ fi
 
 if [ -z "$1" ]
 then
-    /usr/local/cuda/bin/nvcc -ccbin g++ -Xcompiler -fPIC -Xcompiler -Ofast -Xcompiler -march=native -Xcompiler -pthread -Xcompiler -Wall -Xcompiler -Wextra $DEFINES -std=c++14 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca $GENCODE_FLAGS -lineinfo -I/usr/local/cuda/include -c ../cuda/GPUStreamGeneral.cu -o GPUStreamGeneral.o
+    /usr/local/cuda/bin/nvcc -ccbin g++ -Xcompiler -fPIC -Xcompiler -Ofast -Xcompiler -march=native -Xcompiler -pthread -Xcompiler -Wall -Xcompiler -Wextra $DEFINES -std=c++17 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca $GENCODE_FLAGS -lineinfo -I/usr/local/cuda/include -c ../cuda/GPUStreamGeneral.cu -o GPUStreamGeneral.o
 fi
 
-/usr/local/cuda/bin/nvcc -ccbin g++ -Xcompiler -fPIC -Xcompiler -Ofast -Xcompiler -march=native -Xcompiler -pthread -Xcompiler -Wall -Xcompiler -Wextra $DEFINES -std=c++14 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca $GENCODE_FLAGS -lineinfo -I/usr/local/cuda/include -lcublas -lcurand --resource-usage bench_sieving.cpp -o bench_sieving GPUStreamGeneral.o
+/usr/local/cuda/bin/nvcc -ccbin g++ -Xcompiler -fPIC -Xcompiler -Ofast -Xcompiler -march=native -Xcompiler -pthread -Xcompiler -Wall -Xcompiler -Wextra $DEFINES -std=c++17 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca $GENCODE_FLAGS -lineinfo -I/usr/local/cuda/include -lcublas -lcurand --resource-usage bench_sieving.cpp -o bench_sieving GPUStreamGeneral.o
 
-/usr/local/cuda/bin/nvcc -ccbin g++ -Xcompiler -fPIC -Xcompiler -Ofast -Xcompiler -march=native -Xcompiler -pthread -Xcompiler -Wall -Xcompiler -Wextra $DEFINES -std=c++14 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca $GENCODE_FLAGS -lineinfo -I/usr/local/cuda/include -lcublas -lcurand --resource-usage bench_quality.cpp -o bench_quality GPUStreamGeneral.o
+/usr/local/cuda/bin/nvcc -ccbin g++ -Xcompiler -fPIC -Xcompiler -Ofast -Xcompiler -march=native -Xcompiler -pthread -Xcompiler -Wall -Xcompiler -Wextra $DEFINES -std=c++17 -O3 --use_fast_math -Xptxas=-O3,-dlcm=ca $GENCODE_FLAGS -lineinfo -I/usr/local/cuda/include -lcublas -lcurand --resource-usage bench_quality.cpp -o bench_quality GPUStreamGeneral.o

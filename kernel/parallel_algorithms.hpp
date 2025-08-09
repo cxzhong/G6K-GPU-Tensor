@@ -129,8 +129,16 @@ namespace parallel_algorithms {
 
 	// basic iterator: an std::size_t integer that behaves as an iterator
 	class range_iterator
-		: public std::iterator<std::random_access_iterator_tag, const std::size_t>
 	{
+	public:
+		// Iterator type aliases (C++17 style, replacing deprecated std::iterator)
+		using iterator_category = std::random_access_iterator_tag;
+		using value_type = const std::size_t;
+		using difference_type = std::ptrdiff_t;
+		using pointer = const std::size_t*;
+		using reference = const std::size_t&;
+
+	private:
 		std::size_t _i;
 
 	public:

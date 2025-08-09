@@ -1027,8 +1027,8 @@ private:
         Entry const &back() const { return new_vals.back(); }
         NODISCARD bool empty() const noexcept { return new_vals.empty(); }
         std::vector<Entry>::size_type size() const noexcept { return new_vals.size(); }
-        template<class...Args> auto emplace_back(Args&&... args) -> decltype( new_vals.emplace_back(std::forward<Args>(args)...) )
-            { return new_vals.emplace_back(std::forward<Args>(args)...); } // I want C++14 decltype(auto)
+        template<class...Args> decltype(auto) emplace_back(Args&&... args)
+            { return new_vals.emplace_back(std::forward<Args>(args)...); } // Using C++17 decltype(auto)
         void pop_back() { new_vals.pop_back(); }
     };
 
