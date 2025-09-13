@@ -330,29 +330,29 @@ jobs:
     - name: Test G6K imports and extensions
       run: |
         python -c '
-import g6k
-print("✅ g6k imported successfully")
-
-from g6k import Siever  
-print("✅ Siever class imported successfully")
-
-try:
-    import fpylll
-    print("✅ fpylll imported successfully")
-except ImportError as e:
-    print("⚠️ fpylll import failed:", e)
-
-# Check built extensions
-import os
-extensions = []
-for root, dirs, files in os.walk("g6k"):
-    for file in files:
-        if file.endswith(".so"):
-            extensions.append(os.path.join(root, file))
-
-print("Built extensions:", extensions)
-print("✅ G6K imports successful!")
-'
+        import g6k
+        print("✅ g6k imported successfully")
+        
+        from g6k import Siever  
+        print("✅ Siever class imported successfully")
+        
+        try:
+            import fpylll
+            print("✅ fpylll imported successfully")
+        except ImportError as e:
+            print("⚠️ fpylll import failed:", e)
+        
+        # Check built extensions
+        import os
+        extensions = []
+        for root, dirs, files in os.walk("g6k"):
+            for file in files:
+                if file.endswith(".so"):
+                    extensions.append(os.path.join(root, file))
+        
+        print("Built extensions:", extensions)
+        print("✅ G6K imports successful!")
+        '
 
     - name: Upload build artifacts (on failure)
       if: failure()
@@ -372,25 +372,25 @@ print("✅ G6K imports successful!")
         
         # Test basic G6K functionality without GPU runtime
         python -c '
-import sys
-sys.path.insert(0, ".")
-
-print("Testing basic G6K functionality...")
-from g6k.utils.util import load_svp_challenge
-from g6k import Siever
-
-# Load a small challenge matrix
-A = load_svp_challenge(40, seed=1337)
-print("✅ Loaded SVP challenge matrix, shape: {}x{}".format(A.nrows, A.ncols))
-
-# Initialize siever (will detect no GPU drivers and fall back to CPU)
-g6k = Siever(A)
-print("✅ Siever initialized successfully")
-
-# Run basic sieving test
-g6k.initialize_local(0, 0, 20)  
-g6k()
-print("✅ Basic sieving completed, found {} vectors".format(g6k.l))
-
-print("✅ G6K functionality test passed!")
-'
+        import sys
+        sys.path.insert(0, ".")
+        
+        print("Testing basic G6K functionality...")
+        from g6k.utils.util import load_svp_challenge
+        from g6k import Siever
+        
+        # Load a small challenge matrix
+        A = load_svp_challenge(40, seed=1337)
+        print("✅ Loaded SVP challenge matrix, shape: {}x{}".format(A.nrows, A.ncols))
+        
+        # Initialize siever (will detect no GPU drivers and fall back to CPU)
+        g6k = Siever(A)
+        print("✅ Siever initialized successfully")
+        
+        # Run basic sieving test
+        g6k.initialize_local(0, 0, 20)  
+        g6k()
+        print("✅ Basic sieving completed, found {} vectors".format(g6k.l))
+        
+        print("✅ G6K functionality test passed!")
+        '
