@@ -48,7 +48,7 @@ jobs:
     - name: Install CUDA Toolkit ${{ matrix.cuda-version }}
       id: cuda-install
       if: steps.cache-cuda.outputs.cache-hit != 'true'
-      uses: Jimver/cuda-toolkit@v0.2.28
+      uses: Jimver/cuda-toolkit@v0.2.27
       with:
         cuda: ${{ matrix.cuda-version }}
         method: 'local'
