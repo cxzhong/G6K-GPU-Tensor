@@ -77,14 +77,18 @@ jobs:
 
     - name: Install parallel-hashmap if needed
       run: |
-        if [ ! -d "/usr/local/include/parallel_hashmap" ]; then
+        if [ ! -d "/usr/local/include/parallel_hashmap" ] && [ ! -d "/usr/include/parallel_hashmap" ]; then
           echo "Installing parallel-hashmap..."
-          git clone https://github.com/greg7mdp/parallel-hashmap.git /tmp/parallel-hashmap
-          cd /tmp/parallel-hashmap
-          mkdir -p build && cd build
-          cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
-          make -j$(nproc)
-          sudo make install
+          sudo apt-get update || true
+          sudo apt-get install -y libparallel-hashmap-dev || {
+            echo "⚠️ Package not available, installing from source..."
+            git clone https://github.com/greg7mdp/parallel-hashmap.git /tmp/parallel-hashmap
+            cd /tmp/parallel-hashmap
+            mkdir -p build && cd build
+            cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+            make -j$(nproc)
+            sudo make install
+          }
         else
           echo "✅ parallel-hashmap already installed"
         fi
