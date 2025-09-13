@@ -55,7 +55,6 @@ jobs:
         use-github-cache: false
         log-file-suffix: '-py${{ matrix.python-version }}-${{ github.run_id }}'
         non-cuda-sub-packages: '[]'
-        sub-packages: '["nvcc", "cuobjdump", "nvprune", "cupti", "nvdisasm"]'
       continue-on-error: true
       timeout-minutes: 20
       env:
