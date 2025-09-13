@@ -11,7 +11,12 @@ jobs:
   build-gpu:
     name: Build GPU version with CUDA
     runs-on: ubuntu-latest
+    # Add concurrency control to prevent cache conflicts
+    concurrency:
+      group: cuda-install-${{ matrix.python-version }}-${{ matrix.cuda-version }}-${{ github.ref }}
+      cancel-in-progress: false
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
         cuda-version: ["12.8.0", "13.0.0"]
@@ -27,12 +32,26 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
+    - name: Cache CUDA Installation
+      id: cache-cuda
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local/cuda*
+          ~/.cache/cuda
+        key: cuda-${{ matrix.cuda-version }}-${{ runner.os }}-${{ runner.arch }}-v2
+        restore-keys: |
+          cuda-${{ matrix.cuda-version }}-${{ runner.os }}-
+          cuda-12-${{ runner.os }}-
+
     - name: Install CUDA Toolkit ${{ matrix.cuda-version }}
       id: cuda-install
+      if: steps.cache-cuda.outputs.cache-hit != 'true'
       uses: Jimver/cuda-toolkit@v0.2.27
       with:
         cuda: ${{ matrix.cuda-version }}
         method: 'local'
+        use-github-cache: false  # Disable internal caching to avoid conflicts
       continue-on-error: true
 
     - name: Set CUDA environment variables
@@ -43,38 +62,88 @@ jobs:
         echo "LD_LIBRARY_PATH=${{ steps.cuda-install.outputs.CUDA_PATH }}/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
         echo "CPATH=${{ steps.cuda-install.outputs.CUDA_PATH }}/include:$CPATH" >> $GITHUB_ENV
 
-    - name: Fallback CUDA installation (if action fails)
-      if: steps.cuda-install.outcome == 'failure'
+    - name: Fallback CUDA installation (if action fails or cache miss)
+      if: steps.cuda-install.outcome == 'failure' || (steps.cache-cuda.outputs.cache-hit != 'true' && steps.cuda-install.outcome != 'success')
       run: |
-        echo "CUDA action failed, trying manual installation..."
+        echo "CUDA installation needed, trying multiple methods..."
         
-        # Ensure pip is available
-        python -m ensurepip --upgrade 2>/dev/null || echo "ensurepip already available"
-        python -m pip install --upgrade pip
+        # Method 1: Try direct download and install
+        CUDA_VERSION="${{ matrix.cuda-version }}"
+        CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1)
+        CUDA_MINOR=$(echo $CUDA_VERSION | cut -d. -f2)
         
-        # Add NVIDIA package repository
-        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.0-1_all.deb || \
-        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
+        echo "Attempting direct CUDA installation for version $CUDA_VERSION"
         
-        sudo dpkg -i cuda-keyring_1.0-1_all.deb 2>/dev/null || echo "Keyring install may have failed, continuing..."
-        sudo apt-get update || echo "apt update failed, continuing..."
+        # Create temporary directory
+        TEMP_DIR=$(mktemp -d)
+        cd $TEMP_DIR
         
-        # Install minimal CUDA toolkit
-        sudo apt-get install -y cuda-toolkit-12-5 || \
-        sudo apt-get install -y cuda-toolkit-12-0 || \
-        sudo apt-get install -y nvidia-cuda-toolkit || \
-        echo "⚠️ CUDA installation failed - will build CPU-only version"
+        # Method 1a: Try runfile installation
+        RUNFILE_URL="https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/local_installers/cuda_${CUDA_VERSION}_550.54.15_linux.run"
+        echo "Trying runfile installation from: $RUNFILE_URL"
         
-        # Set CUDA paths
-        for cuda_path in /usr/local/cuda /usr/local/cuda-12.5 /usr/local/cuda-12.0; do
-          if [ -d "$cuda_path" ]; then
+        if wget -q --spider $RUNFILE_URL 2>/dev/null; then
+          wget $RUNFILE_URL -O cuda_installer.run
+          chmod +x cuda_installer.run
+          
+          # Install with retry mechanism
+          for attempt in 1 2 3; do
+            echo "Installation attempt $attempt/3..."
+            if sudo ./cuda_installer.run --silent --toolkit --no-drm --no-man-page --override; then
+              echo "✅ CUDA runfile installation successful"
+              break
+            else
+              echo "⚠️ Installation attempt $attempt failed, retrying..."
+              sleep 10
+            fi
+          done
+        fi
+        
+        # Method 1b: Try repository installation
+        if [ ! -f "/usr/local/cuda/bin/nvcc" ]; then
+          echo "Trying repository installation..."
+          
+          # Add NVIDIA package repository
+          OS_VERSION=$(lsb_release -rs | tr -d '.')
+          ARCH=$(uname -m)
+          
+          wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${OS_VERSION}/${ARCH}/cuda-keyring_1.1-1_all.deb" || \
+          wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/${ARCH}/cuda-keyring_1.1-1_all.deb"
+          
+          sudo dpkg -i /tmp/cuda-keyring.deb 2>/dev/null || echo "Keyring install may have failed, continuing..."
+          sudo apt-get update -qq || echo "apt update failed, continuing..."
+          
+          # Install minimal CUDA toolkit with version specificity
+          sudo apt-get install -y cuda-toolkit-${CUDA_MAJOR}-${CUDA_MINOR} 2>/dev/null || \
+          sudo apt-get install -y cuda-toolkit-12-0 2>/dev/null || \
+          sudo apt-get install -y nvidia-cuda-toolkit 2>/dev/null || \
+          echo "⚠️ Repository CUDA installation failed"
+        fi
+        
+        # Clean up
+        cd /
+        rm -rf $TEMP_DIR
+        
+        # Verify installation and set environment
+        CUDA_FOUND=false
+        for cuda_path in /usr/local/cuda /usr/local/cuda-${CUDA_MAJOR}.${CUDA_MINOR} /usr/local/cuda-${CUDA_MAJOR}-${CUDA_MINOR} /usr/local/cuda-12.0 /usr; do
+          if [ -f "$cuda_path/bin/nvcc" ]; then
+            echo "✅ Found CUDA at: $cuda_path"
             echo "CUDA_HOME=$cuda_path" >> $GITHUB_ENV
             echo "$cuda_path/bin" >> $GITHUB_PATH
-            echo "LD_LIBRARY_PATH=$cuda_path/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-            echo "CPATH=$cuda_path/include:$CPATH" >> $GITHUB_ENV
+            echo "LD_LIBRARY_PATH=$cuda_path/lib64:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+            echo "CPATH=$cuda_path/include:${CPATH}" >> $GITHUB_ENV
+            CUDA_FOUND=true
             break
           fi
         done
+        
+        if [ "$CUDA_FOUND" = false ]; then
+          echo "⚠️ CUDA installation failed - will build CPU-only version"
+          echo "CUDA_AVAILABLE=false" >> $GITHUB_ENV
+        else
+          echo "CUDA_AVAILABLE=true" >> $GITHUB_ENV
+        fi
 
     - name: Install system dependencies
       run: |
@@ -148,13 +217,26 @@ jobs:
         fi
 
     - name: Build and install G6K with GPU support
+      timeout-minutes: 30
       run: |
         echo "Building G6K..."
         
         # Check if CUDA is available for compilation
-        if command -v nvcc &> /dev/null; then
+        if command -v nvcc &> /dev/null && [ "${CUDA_AVAILABLE:-true}" = "true" ]; then
           echo "🚀 Building with CUDA support"
-          python -m pip install -e . -v
+          nvcc --version
+          echo "CUDA_HOME: ${CUDA_HOME:-Not set}"
+          
+          # Build with CUDA support
+          python -m pip install -e . -v 2>&1 | tee build.log
+          
+          # Check if CUDA extensions were actually built
+          if find . -name "*.so" -exec file {} \; | grep -i cuda; then
+            echo "✅ CUDA extensions built successfully"
+          else
+            echo "⚠️ No CUDA extensions found in build output, checking build log..."
+            grep -i "cuda\|gpu" build.log || echo "No CUDA references in build log"
+          fi
         else
           echo "⚠️ CUDA not available, building CPU-only version"
           G6K_ENABLE_CUDA=0 python -m pip install -e . -v

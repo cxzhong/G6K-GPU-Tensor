@@ -33,6 +33,11 @@ jobs:
     runs-on: self-hosted
     # runs-on: ubuntu-latest  # Uncomment this for CPU-only testing
     
+    # Add concurrency control for self-hosted runners
+    concurrency:
+      group: cuda-selfhosted-${{ github.ref }}
+      cancel-in-progress: false
+    
     if: github.repository == 'cxzhong/G6K-GPU-Tensor'  # Only run on your repo
     
     steps:
