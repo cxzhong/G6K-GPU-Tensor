@@ -1,0 +1,33 @@
+# Include all necessary files for building G6K
+
+# Documentation
+include README.rst
+include LICENSE
+include *.md
+
+# Build configuration
+include pyproject.toml
+include Makefile
+include Makefile.local
+include rebuild.sh
+include install-deps.sh
+include bootstrap.sh
+include params.txt
+
+# Source files  
+recursive-include g6k *.pyx *.pxd *.py
+recursive-include kernel *.cpp *.h *.hpp *.inl Makefile
+recursive-include cuda *.cu *.cpp *.h *.hpp *.inl
+recursive-include scripts *
+
+# Dependencies
+recursive-include parallel-hashmap *
+
+# Tests
+recursive-include tests *.py
+
+# Spherical coding data
+recursive-include spherical_coding *.def *.py *.sh
+
+# Python package files
+include g6k/__init__.py

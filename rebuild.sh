@@ -1,5 +1,25 @@
 #!/bin/bash
 
+# G6K-GPU-Tensor Rebuild Script (Modernized for PEP 517/518)
+# Usage: ./rebuild.sh [OPTIONS]
+# 
+# This script configures and rebuilds G6K with custom parameters using the modern pip-based system.
+# 
+# Key Options:
+#   -m, --maxsievingdim N    Set maximum sieving dimension (default: 128)
+#   --gpuvecnum N           Set GPU vector number (default: 65536)
+#   -f, --fast              Fast build (NDEBUG, templated dimensions)
+#   -s, --stats             Enable statistics collection
+#   -c, --cpucounters       Enable CPU performance counters
+#   -g, --ggdb              Enable debug symbols
+#   -j, --jobs N            Number of parallel jobs (default: 4)
+#
+# Examples:
+#   ./rebuild.sh -m 160                    # Build for max dimension 160
+#   ./rebuild.sh -m 256 --fast             # Fast build for dimension 256
+#   ./rebuild.sh -m 160 --gpuvecnum 131072 # Custom GPU vector size
+#   ./rebuild.sh --onlyconf                # Only generate configuration, don't build
+
 echo "Git status: " > .last_build
 git log --pretty=short | head -n5 >> .last_build
 git status | grep "modified" >> .last_build
@@ -193,10 +213,39 @@ fi
 
 [ -d parallel-hashmap ] || git clone https://github.com/cr-marcstevens/parallel-hashmap
 
-rm -r build *.so g6k/*.so cuda/*.so kernel/*.so `find g6k -name "*.pyc"`
-python3 setup.py clean
-make -C kernel clean || exit 1
+# Clean build artifacts
+rm -rf build/ *.so g6k/*.so g6k/*.cpp cuda/*.o kernel/*.o *.egg-info/ __pycache__/ g6k/__pycache__/ `find g6k -name "*.pyc"`
 
-make -C kernel -j ${jobs} || exit 1
+# Ensure parallel-hashmap dependency
+[ -d parallel-hashmap ] || git clone https://github.com/cr-marcstevens/parallel-hashmap
 
-python3 setup.py build_ext --inplace -j ${jobs} || python setup.py build_ext --inplace
+# Write compile-time configuration for setup.py to use
+cat >compile_config.py <<EOF
+# Auto-generated configuration from rebuild.sh
+REBUILD_CONFIG = {
+    'MAX_SIEVING_DIM': ${maxsievingdim},
+    'GPUVECNUM': ${gpuvecnum},
+    'EXTRAFLAGS': '${EXTRAFLAGS}',
+    'HAVE_CUDA': ${HAVE_CUDA},
+    'CUDA_PATH': '${cuda_path}',
+    'NVCC': '${NVCC}',
+    'CUDA_FLAGS': '${CUDA_FLAGS}',
+    'CUDA_LIBS': '${CUDA_LIBS}'
+}
+EOF
+
+echo "Building G6K with MAX_SIEVING_DIM=${maxsievingdim}, GPUVECNUM=${gpuvecnum}"
+echo "Extra flags: ${EXTRAFLAGS}"
+echo "CUDA enabled: ${HAVE_CUDA}"
+
+# Use modern pip-based build system
+if [ -n "${VIRTUAL_ENV}" ]; then
+    echo "Using virtual environment: ${VIRTUAL_ENV}"
+    pip install -e . --force-reinstall --no-deps || exit 1
+else
+    echo "No virtual environment detected. Installing globally with pip..."
+    pip install -e . --force-reinstall --no-deps || exit 1
+fi
+
+echo "Build completed successfully!"
+echo "Configuration written to Makefile.local and compile_config.py"
