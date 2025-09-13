@@ -8,8 +8,8 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  build-gpu:
-    name: Build GPU version with CUDA
+  build-cpu:
+    name: Build and test CPU version
     runs-on: ubuntu-latest
     timeout-minutes: 60  # Prevent jobs from hanging
     # Add concurrency control to prevent cache conflicts
@@ -56,7 +56,7 @@ jobs:
         use-github-cache: false  # Disable internal caching to avoid conflicts
         log-file-suffix: '-py${{ matrix.python-version }}-${{ github.run_id }}'  # Unique log files
         non-cuda-sub-packages: '[]'  # Minimal installation
-        sub-packages: '["nvcc", "cuobjdump", "nvprune", "cupti", "gpu-library-advisor", "memcheck", "nvdisasm", "nvprof"]'
+        sub-packages: '["nvcc", "cuobjdump", "nvprune", "cupti", "nvdisasm"]'
       continue-on-error: true
       timeout-minutes: 20  # Prevent hanging installations
       env:
@@ -127,21 +127,52 @@ jobs:
         if [ ! -f "/usr/local/cuda/bin/nvcc" ]; then
           echo "Trying repository installation..."
           
-          # Add NVIDIA package repository
+          # Add NVIDIA package repository with better Ubuntu 24.04 support
           OS_VERSION=$(lsb_release -rs | tr -d '.')
           ARCH=$(uname -m)
           
-          wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${OS_VERSION}/${ARCH}/cuda-keyring_1.1-1_all.deb" || \
-          wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/${ARCH}/cuda-keyring_1.1-1_all.deb"
+          # Handle Ubuntu 24.04 specifically
+          if [ "$OS_VERSION" = "2404" ]; then
+            REPO_VERSION="ubuntu2404"
+          elif [ "$OS_VERSION" = "2204" ]; then
+            REPO_VERSION="ubuntu2204"
+          elif [ "$OS_VERSION" = "2004" ]; then
+            REPO_VERSION="ubuntu2004"
+          else
+            # Fallback to 22.04 for unknown versions
+            REPO_VERSION="ubuntu2204"
+          fi
+          
+          echo "Using repository: $REPO_VERSION for OS version $OS_VERSION"
+          
+          # Download and install keyring
+          wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/${REPO_VERSION}/${ARCH}/cuda-keyring_1.1-1_all.deb" || {
+            echo "⚠️ Failed to download keyring, trying alternative..."
+            wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/${ARCH}/cuda-keyring_1.1-1_all.deb"
+          }
           
           sudo dpkg -i /tmp/cuda-keyring.deb 2>/dev/null || echo "Keyring install may have failed, continuing..."
+          
+          # Clean up potential duplicate sources
+          sudo rm -f /etc/apt/sources.list.d/archive_uri-http_developer_download_nvidia_com_compute_cuda_repos_*
+          
           sudo apt-get update -qq || echo "apt update failed, continuing..."
           
-          # Install minimal CUDA toolkit with version specificity
-          sudo apt-get install -y cuda-toolkit-${CUDA_MAJOR}-${CUDA_MINOR} 2>/dev/null || \
-          sudo apt-get install -y cuda-toolkit-12-0 2>/dev/null || \
-          sudo apt-get install -y nvidia-cuda-toolkit 2>/dev/null || \
-          echo "⚠️ Repository CUDA installation failed"
+          # Try installing available CUDA packages for version 13.0
+          echo "Attempting to install CUDA 13.0 packages..."
+          sudo apt-get install -y \
+            cuda-nvcc-13-0 \
+            cuda-cuobjdump-13-0 \
+            cuda-nvprune-13-0 \
+            cuda-cupti-13-0 \
+            cuda-nvdisasm-13-0 2>/dev/null || {
+            
+            echo "⚠️ CUDA 13.0 packages failed, trying minimal toolkit installation..."
+            sudo apt-get install -y cuda-toolkit-13-0 2>/dev/null || \
+            sudo apt-get install -y cuda-toolkit-12-0 2>/dev/null || \
+            sudo apt-get install -y nvidia-cuda-toolkit 2>/dev/null || \
+            echo "⚠️ All repository CUDA installation methods failed"
+          }
         fi
         
         # Clean up
@@ -150,7 +181,19 @@ jobs:
         
         # Verify installation and set environment
         CUDA_FOUND=false
-        for cuda_path in /usr/local/cuda /usr/local/cuda-${CUDA_MAJOR}.${CUDA_MINOR} /usr/local/cuda-${CUDA_MAJOR}-${CUDA_MINOR} /usr/local/cuda-12.0 /usr; do
+        
+        # Check for nvcc in various locations
+        CUDA_PATHS=(
+          "/usr/local/cuda"
+          "/usr/local/cuda-${CUDA_MAJOR}.${CUDA_MINOR}"
+          "/usr/local/cuda-${CUDA_MAJOR}-${CUDA_MINOR}"
+          "/usr/local/cuda-13.0"
+          "/usr/local/cuda-12.0"
+          "/usr/cuda"
+          "/usr"
+        )
+        
+        for cuda_path in "${CUDA_PATHS[@]}"; do
           if [ -f "$cuda_path/bin/nvcc" ]; then
             echo "✅ Found CUDA at: $cuda_path"
             echo "CUDA_HOME=$cuda_path" >> $GITHUB_ENV
@@ -161,6 +204,16 @@ jobs:
             break
           fi
         done
+        
+        # Also check if nvcc is available via system packages (Ubuntu 24.04 style)
+        if [ "$CUDA_FOUND" = false ] && command -v nvcc >/dev/null 2>&1; then
+          echo "✅ Found system nvcc: $(which nvcc)"
+          CUDA_HOME=$(dirname $(dirname $(which nvcc)))
+          echo "CUDA_HOME=$CUDA_HOME" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+          echo "CPATH=/usr/include/cuda:${CPATH}" >> $GITHUB_ENV
+          CUDA_FOUND=true
+        fi
         
         if [ "$CUDA_FOUND" = false ]; then
           echo "⚠️ CUDA installation failed - will build CPU-only version"
@@ -237,28 +290,52 @@ jobs:
     - name: Verify CUDA installation
       run: |
         echo "Checking CUDA installation..."
-        nvcc --version || echo "⚠️ nvcc not found"
+        
+        if command -v nvcc >/dev/null 2>&1; then
+          echo "✅ nvcc found: $(which nvcc)"
+          nvcc --version
+        else
+          echo "⚠️ nvcc not found"
+        fi
+        
         echo "CUDA_HOME: ${CUDA_HOME:-Not set}"
         echo "PATH: $PATH"
+        echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-Not set}"
         
-        # Check for CUDA in common locations
-        for cuda_path in /usr/local/cuda /usr/local/cuda-12.5 /usr/local/cuda-12.0 /opt/cuda; do
+        # Check for CUDA in all possible locations
+        CUDA_LOCATIONS=(
+          "/usr/local/cuda"
+          "/usr/local/cuda-13.0"
+          "/usr/local/cuda-12.5"
+          "/usr/local/cuda-12.0"
+          "/opt/cuda"
+          "/usr/cuda"
+        )
+        
+        echo "Scanning for CUDA installations:"
+        for cuda_path in "${CUDA_LOCATIONS[@]}"; do
           if [ -d "$cuda_path" ]; then
-            echo "Found CUDA at: $cuda_path"
-            ls -la "$cuda_path/bin/nvcc" 2>/dev/null || echo "nvcc not found in $cuda_path/bin/"
+            echo "📁 Found directory: $cuda_path"
+            if [ -f "$cuda_path/bin/nvcc" ]; then
+              echo "  ✅ nvcc found: $cuda_path/bin/nvcc"
+              ls -la "$cuda_path/bin/nvcc"
+            else
+              echo "  ❌ nvcc not found in $cuda_path/bin/"
+            fi
           fi
         done
         
-        # Set fallback environment if CUDA found
-        if [ -z "$CUDA_HOME" ]; then
-          for cuda_path in /usr/local/cuda /usr/local/cuda-12.5 /usr/local/cuda-12.0; do
-            if [ -f "$cuda_path/bin/nvcc" ]; then
-              echo "Setting CUDA_HOME to $cuda_path"
-              echo "CUDA_HOME=$cuda_path" >> $GITHUB_ENV
-              echo "PATH=$cuda_path/bin:$PATH" >> $GITHUB_ENV
-              break
-            fi
-          done
+        # Check system-installed CUDA packages
+        echo "Checking system CUDA packages:"
+        dpkg -l | grep cuda | head -10 || echo "No CUDA packages found"
+        
+        # Set fallback environment if CUDA found but CUDA_HOME not set
+        if [ -z "$CUDA_HOME" ] && command -v nvcc >/dev/null 2>&1; then
+          NVCC_PATH=$(which nvcc)
+          CUDA_HOME_FALLBACK=$(dirname $(dirname "$NVCC_PATH"))
+          echo "Setting fallback CUDA_HOME to $CUDA_HOME_FALLBACK"
+          echo "CUDA_HOME=$CUDA_HOME_FALLBACK" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$CUDA_HOME_FALLBACK/lib64:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
         fi
 
     - name: Build and install G6K with GPU support
@@ -266,54 +343,49 @@ jobs:
       run: |
         echo "Building G6K..."
         
-        # Check if CUDA is available for compilation
-        if command -v nvcc &> /dev/null && [ "${CUDA_AVAILABLE:-true}" = "true" ]; then
-          echo "🚀 Building with CUDA support"
-          nvcc --version
-          echo "CUDA_HOME: ${CUDA_HOME:-Not set}"
-          
-          # Build with CUDA support
-          python -m pip install -e . -v 2>&1 | tee build.log
-          
-          # Check if CUDA extensions were actually built
-          if find . -name "*.so" -exec file {} \; | grep -i cuda; then
-            echo "✅ CUDA extensions built successfully"
-          else
-            echo "⚠️ No CUDA extensions found in build output, checking build log..."
-            grep -i "cuda\|gpu" build.log || echo "No CUDA references in build log"
-          fi
+        echo "Building G6K for CI environment..."
+        
+        # GitHub CI doesn't have GPU drivers, so build CPU-only version
+        # even if CUDA toolkit is installed
+        echo "🖥️ Building CPU-only version (no GPU drivers in CI environment)"
+        G6K_ENABLE_CUDA=0 python -m pip install -e . -v 2>&1 | tee build.log
+        
+        # Verify that CPU-only build completed successfully
+        if [ $? -eq 0 ]; then
+          echo "✅ CPU-only build completed successfully"
         else
-          echo "⚠️ CUDA not available, building CPU-only version"
-          G6K_ENABLE_CUDA=0 python -m pip install -e . -v
+          echo "❌ Build failed, checking build log..."
+          grep -i "error\|failed" build.log || echo "No obvious errors in build log"
+          exit 1
         fi
 
-    - name: Test GPU-accelerated imports
+    - name: Test G6K imports and extensions
       run: |
         python -c "
-        print('Testing G6K GPU imports...')
-        import g6k
-        print('✅ g6k imported successfully')
-        
-        from g6k import Siever
-        print('✅ Siever class imported successfully')
-        
-        try:
-            import fpylll
-            print('✅ fpylll imported successfully')
-        except ImportError as e:
-            print('⚠️ fpylll import failed:', e)
-        
-        # Check if CUDA extensions were built
-        import os
-        cuda_libs = []
-        for root, dirs, files in os.walk('g6k'):
-            for file in files:
-                if file.endswith('.so'):
-                    cuda_libs.append(os.path.join(root, file))
-        
-        print(f'Built extensions: {cuda_libs}')
-        print('🚀 G6K GPU version imports successful!')
-        "
+print('Testing G6K imports...')
+import g6k
+print('✅ g6k imported successfully')
+
+from g6k import Siever
+print('✅ Siever class imported successfully')
+
+try:
+    import fpylll
+    print('✅ fpylll imported successfully')
+except ImportError as e:
+    print('⚠️ fpylll import failed:', e)
+
+# Check built extensions
+import os
+extensions = []
+for root, dirs, files in os.walk('g6k'):
+    for file in files:
+        if file.endswith('.so'):
+            extensions.append(os.path.join(root, file))
+
+print(f'Built extensions: {extensions}')
+print('✅ G6K imports successful!')
+"
 
     - name: Upload build artifacts (on failure)
       if: failure()
@@ -327,36 +399,34 @@ jobs:
         retention-days: 7
         if-no-files-found: ignore
 
-    - name: Test GPU-accelerated SVP challenge
+    - name: Test G6K functionality (CPU-only for CI)
       run: |
-        echo "Testing GPU-accelerated SVP challenge..."
-        # Use command line interface for simpler testing
-        timeout 300 python svp_challenge.py 40 --trials 1 --seed 1337 --verbose || {
-          echo "⚠️ SVP challenge test failed or timed out, continuing with basic test..."
-          
-          # Fallback to basic G6K functionality test
-          python -c "
-          import sys
-          sys.path.insert(0, '.')
-          
-          print('Testing basic G6K functionality...')
-          from g6k.utils.util import load_svp_challenge
-          from g6k import Siever
-          
-          # Load a small challenge matrix
-          A = load_svp_challenge(40, seed=1337)
-          print(f'✅ Loaded SVP challenge matrix, shape: {A.nrows}x{A.ncols}')
-          
-          # Initialize siever
-          g6k = Siever(A)
-          print('✅ Siever initialized successfully')
-          
-          # Run basic sieving test
-          g6k.initialize_local(0, 0, 20)  
-          g6k()
-          print(f'✅ Basic sieving completed, found {g6k.l} vectors')
-          "
-        }
+        echo "Testing G6K functionality (CPU-only - no GPU drivers in CI)..."
+        
+        # Test basic G6K functionality without GPU
+        python -c "
+import sys
+sys.path.insert(0, '.')
+
+print('Testing basic G6K functionality...')
+from g6k.utils.util import load_svp_challenge
+from g6k import Siever
+
+# Load a small challenge matrix
+A = load_svp_challenge(40, seed=1337)
+print(f'✅ Loaded SVP challenge matrix, shape: {A.nrows}x{A.ncols}')
+
+# Initialize siever (will use CPU-only since no GPU drivers)
+g6k = Siever(A)
+print('✅ Siever initialized successfully')
+
+# Run basic sieving test
+g6k.initialize_local(0, 0, 20)  
+g6k()
+print(f'✅ Basic sieving completed, found {g6k.l} vectors')
+
+print('✅ G6K CPU functionality test passed!')
+"
 
     - name: Test rebuild script functionality
       run: |
@@ -366,7 +436,7 @@ jobs:
         echo "✅ Rebuild script executed successfully"
 
   build-validation:
-    name: Validate GPU package distribution
+    name: Validate package distribution
     runs-on: ubuntu-latest
     
     steps:
@@ -452,43 +522,40 @@ jobs:
       run: |
         check-manifest --verbose
 
-    - name: Build GPU-enabled source distribution
+    - name: Build CPU-only source distribution
       run: |
-        if command -v nvcc &> /dev/null; then
-          echo "🚀 Building source distribution with CUDA support..."
-        else
-          echo "⚠️ Building source distribution (CUDA not available)..."
-          export G6K_ENABLE_CUDA=0
-        fi
+        echo "� Building CPU-only source distribution for CI..."
+        export G6K_ENABLE_CUDA=0
         python -m build --sdist
 
-    - name: Build GPU-enabled wheel distribution
+    - name: Build CPU-only wheel distribution
       run: |
-        if command -v nvcc &> /dev/null; then
-          echo "🚀 Building wheel distribution with CUDA support..."
-        else
-          echo "⚠️ Building wheel distribution (CUDA not available)..."
-          export G6K_ENABLE_CUDA=0
-        fi
+        echo "� Building CPU-only wheel distribution for CI..."
+        export G6K_ENABLE_CUDA=0
         python -m build --wheel
 
     - name: Check distribution metadata
       run: |
         python -m twine check dist/*
 
-    - name: Test installation from GPU wheel
+    - name: Test installation from CPU-only wheel
       run: |
         python -m pip install dist/*.whl
         python -c "
-        import g6k
-        print('✅ GPU wheel installation successful')
-        # Check for CUDA compiled extensions
-        import os
-        for root, dirs, files in os.walk('g6k'):
-            for file in files:
-                if file.endswith('.so'):
-                    print(f'Found extension: {file}')
-        "
+import g6k
+print('✅ CPU-only wheel installation successful')
+
+# Check compiled extensions
+import os
+extensions = []
+for root, dirs, files in os.walk('g6k'):
+    for file in files:
+        if file.endswith('.so'):
+            extensions.append(file)
+
+print(f'Found extensions: {extensions}')
+print('✅ Package installation and import test passed')
+"
 
   code-quality:
     name: Code Quality Checks
