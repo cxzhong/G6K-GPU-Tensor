@@ -17,6 +17,7 @@
 #include "cuda_tensor_wmma.hpp"
 #include <curand_kernel.h>
 
+#include "cuda_tensor_wmma.hpp"
 #include "GPUStreamGeneral.h"
 
 using namespace nvcuda;
