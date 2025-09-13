@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Get full history for changelog
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libgmp-dev \
+          libmpfr-dev \
+          libfplll-dev
+
+    - name: Install build tools
+      run: |
+        python -m pip install --upgrade pip wheel setuptools build twine
+
+    - name: Install parallel-hashmap
+      run: |
+        git clone https://github.com/greg7mdp/parallel-hashmap.git
+        cd parallel-hashmap
+        mkdir build && cd build
+        cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+        make -j$(nproc)
+        sudo make install
+
+    - name: Build distributions
+      env:
+        G6K_ENABLE_CUDA: "0"  # Build CPU-only for wider compatibility
+      run: |
+        echo "Building source and wheel distributions..."
+        python -m build
+        
+        echo "Built files:"
+        ls -la dist/
+
+    - name: Check distributions
+      run: |
+        python -m twine check dist/*
+
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        echo "Generating release notes..."
+        
+        # Get the tag name
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          TAG_NAME="${{ github.event.inputs.tag }}"
+        else
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+        fi
+        
+        echo "Release tag: $TAG_NAME"
+        
+        # Generate changelog since last tag
+        PREV_TAG=$(git describe --tags --abbrev=0 $TAG_NAME^ 2>/dev/null || echo "")
+        
+        if [ -n "$PREV_TAG" ]; then
+          echo "Changes since $PREV_TAG:" > release_notes.md
+          git log --oneline --pretty=format:"- %s" $PREV_TAG..$TAG_NAME >> release_notes.md
+        else
+          echo "Initial release of G6K-GPU-Tensor" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## Features:" >> release_notes.md
+          echo "- PEP 517/518 compliant Python packaging" >> release_notes.md
+          echo "- CUDA GPU acceleration with Tensor Core support" >> release_notes.md
+          echo "- Advanced lattice sieving algorithms" >> release_notes.md
+          echo "- Automated dependency management" >> release_notes.md
+          echo "- Cross-platform compatibility (Linux)" >> release_notes.md
+        fi
+        
+        echo "" >> release_notes.md
+        echo "## Installation:" >> release_notes.md
+        echo '```bash' >> release_notes.md
+        echo "pip install -e ." >> release_notes.md
+        echo '```' >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## GPU Support:" >> release_notes.md
+        echo "For CUDA acceleration, ensure NVIDIA CUDA Toolkit is installed." >> release_notes.md
+        echo "" >> release_notes.md
+        echo "See [INSTALL.md](INSTALL.md) for detailed installation instructions." >> release_notes.md
+        
+        cat release_notes.md
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+        name: Release ${{ github.event.inputs.tag || github.ref_name }}
+        body_path: release_notes.md
+        files: |
+          dist/*
+        draft: false
+        prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload to Test PyPI (optional)
+      if: github.event_name == 'workflow_dispatch'
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      run: |
+        echo "Uploading to Test PyPI..."
+        python -m twine upload --repository testpypi dist/* || echo "⚠️ Test PyPI upload failed or not configured"
+
+  notify:
+    name: Notify Release
+    needs: release
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+    - name: Notify success
+      run: |
+        echo "✅ Release ${{ github.ref_name }} created successfully!"
+        echo "📦 Distribution files uploaded to GitHub Releases"
+        echo "🔗 Release URL: https://github.com/cxzhong/G6K-GPU-Tensor/releases/tag/${{ github.ref_name }}"

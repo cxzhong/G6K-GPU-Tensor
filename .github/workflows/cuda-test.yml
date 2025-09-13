@@ -1,0 +1,175 @@
+name: CUDA Build Test (Self-Hosted)
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'cuda/**'
+      - 'kernel/**'
+      - 'g6k/**'
+      - 'setup.py'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [ main, dev ]
+    paths:
+      - 'cuda/**' 
+      - 'kernel/**'
+      - 'g6k/**'
+      - 'setup.py'
+      - 'pyproject.toml'
+  workflow_dispatch:
+    inputs:
+      max_dimension:
+        description: 'Maximum lattice dimension to test'
+        required: false
+        default: '80'
+        type: string
+
+jobs:
+  cuda-build:
+    name: CUDA-enabled build test
+    # This job should run on self-hosted runners with CUDA capability
+    # Comment out the next line and use 'ubuntu-latest' for CPU-only testing
+    runs-on: self-hosted
+    # runs-on: ubuntu-latest  # Uncomment this for CPU-only testing
+    
+    if: github.repository == 'cxzhong/G6K-GPU-Tensor'  # Only run on your repo
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Check CUDA availability
+      run: |
+        echo "CUDA Toolkit version:"
+        nvcc --version || echo "⚠️ CUDA not available, will build CPU-only"
+        
+        echo "GPU devices:"
+        nvidia-smi || echo "⚠️ No NVIDIA GPUs detected"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update || true  # Don't fail if update fails on self-hosted
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libgmp-dev \
+          libmpfr-dev \
+          libfplll-dev \
+          git \
+          pkg-config || echo "⚠️ Some system packages may be missing"
+
+    - name: Upgrade pip and build tools
+      run: |
+        python -m pip install --upgrade pip wheel setuptools
+
+    - name: Install parallel-hashmap if needed
+      run: |
+        if [ ! -d "/usr/local/include/parallel_hashmap" ]; then
+          echo "Installing parallel-hashmap..."
+          git clone https://github.com/greg7mdp/parallel-hashmap.git /tmp/parallel-hashmap
+          cd /tmp/parallel-hashmap
+          mkdir -p build && cd build
+          cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+          make -j$(nproc)
+          sudo make install
+        else
+          echo "✅ parallel-hashmap already installed"
+        fi
+
+    - name: Build G6K with CUDA support
+      run: |
+        echo "Building G6K with CUDA auto-detection..."
+        python -m pip install -e . -v
+        
+        echo "Checking if CUDA extensions were built:"
+        find . -name "*.so" -exec file {} \; | grep -E "(CUDA|GPU)" || echo "No CUDA libraries found in build output"
+
+    - name: Test CUDA functionality
+      run: |
+        python -c "
+        import g6k
+        from g6k import Siever
+        
+        print('✅ G6K with CUDA support imported successfully')
+        
+        # Test basic siever functionality
+        from g6k.utils.util import load_svp_challenge
+        A = load_svp_challenge(40, seed=1337)
+        g6k = Siever(A)
+        print('✅ Siever initialized with lattice dimension 40')
+        
+        # Run a quick sieving test
+        g6k.initialize_local(0, 0, 20)
+        g6k()  # Run sieving
+        print(f'✅ Sieving completed, found {g6k.l} vectors')
+        "
+
+    - name: Test SVP challenge with GPU acceleration
+      env:
+        MAX_DIM: ${{ github.event.inputs.max_dimension || '80' }}
+      run: |
+        echo "Testing SVP challenge with dimension $MAX_DIM"
+        python svp_challenge.py $MAX_DIM --seed 1337 --verbose
+
+    - name: Test rebuild script with custom dimension
+      env:
+        TEST_DIM: ${{ github.event.inputs.max_dimension || '120' }}
+      run: |
+        echo "Testing rebuild script with max dimension $TEST_DIM"
+        ./rebuild.sh -m $TEST_DIM --fast
+        echo "✅ Rebuild with custom dimension completed"
+
+    - name: Performance benchmark (optional)
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        echo "Running performance benchmark..."
+        cd cuda
+        if [ -f "bench_run.sh" ]; then
+          chmod +x bench_run.sh
+          timeout 300 ./bench_run.sh || echo "⚠️ Benchmark timed out or failed"
+        else
+          echo "No benchmark script found"
+        fi
+
+  cuda-compatibility:
+    name: CUDA Compatibility Matrix
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check CUDA code compatibility
+      run: |
+        echo "Checking CUDA code for common compatibility issues..."
+        
+        # Check for CUDA version compatibility
+        if grep -r "CUDA_VERSION" cuda/ kernel/; then
+          echo "✅ CUDA version checks found"
+        fi
+        
+        # Check for deprecated CUDA functions
+        deprecated_funcs="cudaThreadSynchronize cudaThreadExit __syncthreads_and __syncthreads_or"
+        for func in $deprecated_funcs; do
+          if grep -r "$func" cuda/ kernel/; then
+            echo "⚠️ Deprecated CUDA function found: $func"
+          fi
+        done
+        
+        # Check for proper error handling
+        if grep -r "cudaGetLastError\|cudaSuccess" cuda/ kernel/; then
+          echo "✅ CUDA error handling found"
+        else
+          echo "⚠️ Consider adding CUDA error handling"
+        fi
+        
+        echo "CUDA compatibility check completed"

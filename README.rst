@@ -1,4 +1,9 @@
 > :warning: **Update:** It is recommended to use the dev branch.
+
+.. image:: https://github.com/cxzhong/G6K-GPU-Tensor/actions/workflows/build-test.yml/badge.svg
+   :target: https://github.com/cxzhong/G6K-GPU-Tensor/actions/workflows/build-test.yml
+   :alt: Build Status
+
 ******************************
 G6K - GPU Tensor
 ******************************

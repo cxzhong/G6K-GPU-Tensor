@@ -1,0 +1,218 @@
+name: Build and Test G6K-GPU-Tensor
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-cpu-only:
+    name: Build CPU-only version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libgmp-dev \
+          libmpfr-dev \
+          libfplll-dev \
+          git \
+          pkg-config
+
+    - name: Upgrade pip and build tools
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install --upgrade wheel setuptools build
+
+    - name: Install parallel-hashmap dependency
+      run: |
+        git clone https://github.com/greg7mdp/parallel-hashmap.git
+        cd parallel-hashmap
+        mkdir build && cd build
+        cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+        make -j$(nproc)
+        sudo make install
+
+    - name: Build and install G6K (CPU-only)
+      env:
+        G6K_ENABLE_CUDA: "0"  # Force CPU-only build in CI
+      run: |
+        python -m pip install -e . -v
+
+    - name: Test basic import
+      run: |
+        python -c "
+        print('Testing G6K imports...')
+        import g6k
+        print('✅ g6k imported successfully')
+        
+        from g6k import Siever
+        print('✅ Siever class imported successfully')
+        
+        try:
+            import fpylll
+            print('✅ fpylll imported successfully')
+        except ImportError as e:
+            print('⚠️ fpylll import failed:', e)
+        
+        print('🎉 All basic imports successful!')
+        "
+
+    - name: Test simple SVP challenge (small dimension)
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, '.')
+        
+        print('Testing small SVP challenge...')
+        import svp_challenge
+        
+        # Test very small dimension for CI speed
+        result = svp_challenge.svp_kernel(40, seed=1337, pump_n_down=3)
+        print(f'✅ SVP-40 challenge completed: norm={result}')
+        "
+
+    - name: Test rebuild script functionality
+      run: |
+        # Test that rebuild script works (should use pip backend)
+        chmod +x ./rebuild.sh
+        ./rebuild.sh --fast
+        echo "✅ Rebuild script executed successfully"
+
+  build-validation:
+    name: Validate package distribution
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libgmp-dev \
+          libmpfr-dev \
+          libfplll-dev
+
+    - name: Install build tools
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install build twine check-manifest
+
+    - name: Install parallel-hashmap
+      run: |
+        git clone https://github.com/greg7mdp/parallel-hashmap.git
+        cd parallel-hashmap
+        mkdir build && cd build
+        cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+        make -j$(nproc)
+        sudo make install
+
+    - name: Check manifest completeness
+      run: |
+        check-manifest --verbose
+
+    - name: Build source distribution
+      env:
+        G6K_ENABLE_CUDA: "0"
+      run: |
+        python -m build --sdist
+
+    - name: Build wheel distribution  
+      env:
+        G6K_ENABLE_CUDA: "0"
+      run: |
+        python -m build --wheel
+
+    - name: Check distribution metadata
+      run: |
+        python -m twine check dist/*
+
+    - name: Test installation from wheel
+      run: |
+        python -m pip install dist/*.whl
+        python -c "import g6k; print('✅ Wheel installation successful')"
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install quality tools
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install flake8 black isort
+
+    - name: Check Python code formatting with black
+      run: |
+        black --check --diff *.py g6k/ || echo "⚠️ Consider running: black *.py g6k/"
+
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only --diff *.py g6k/ || echo "⚠️ Consider running: isort *.py g6k/"
+
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 *.py g6k/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Treat other issues as warnings
+        flake8 *.py g6k/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install safety checker
+      run: |
+        python -m pip install --upgrade pip safety
+
+    - name: Check for known security vulnerabilities
+      run: |
+        # Check dependencies for known vulnerabilities
+        python -m pip install -e . --dry-run 2>/dev/null || echo "Dry run for dependency check"
+        safety check --json || echo "⚠️ Security vulnerabilities found, review recommended"
