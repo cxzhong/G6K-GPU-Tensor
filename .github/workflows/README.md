@@ -15,8 +15,8 @@ This repository includes comprehensive GitHub Actions workflows to ensure build 
 
 **What it tests:**
 - 🚀 GPU-enabled PEP 517/518 compliant build with `pip install -e .`
-- 🚀 CUDA Toolkit integration (versions 11.8.0, 12.0.0)
-- 🚀 Python version compatibility (3.10-3.13) with GPU support
+- 🚀 CUDA Toolkit integration (versions 12.0.0, 12.5.0) using v0.2.27 action
+- 🚀 Python version compatibility (3.10-3.13) with GPU support  
 - 🚀 GPU-accelerated functionality and imports
 - 🚀 SVP challenge execution with CUDA acceleration
 - 🚀 Rebuild script functionality with GPU compilation
@@ -50,7 +50,7 @@ Add this badge to your README.md to show build status:
 
 ### GPU-enabled testing (Recommended):
 ```bash
-# Install CUDA Toolkit (11.8.0+ or 12.0.0+)
+# Install CUDA Toolkit (12.0.0+ or 12.5.0+)
 # Follow NVIDIA CUDA installation guide for your OS
 
 # Install system dependencies
