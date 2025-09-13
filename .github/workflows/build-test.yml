@@ -35,10 +35,22 @@ jobs:
         method: 'local'
       continue-on-error: true
 
+    - name: Set CUDA environment variables
+      if: steps.cuda-install.outcome == 'success'
+      run: |
+        echo "CUDA_HOME=${{ steps.cuda-install.outputs.CUDA_PATH }}" >> $GITHUB_ENV
+        echo "${{ steps.cuda-install.outputs.CUDA_PATH }}/bin" >> $GITHUB_PATH
+        echo "LD_LIBRARY_PATH=${{ steps.cuda-install.outputs.CUDA_PATH }}/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "CPATH=${{ steps.cuda-install.outputs.CUDA_PATH }}/include:$CPATH" >> $GITHUB_ENV
+
     - name: Fallback CUDA installation (if action fails)
       if: steps.cuda-install.outcome == 'failure'
       run: |
         echo "CUDA action failed, trying manual installation..."
+        
+        # Ensure pip is available
+        python -m ensurepip --upgrade 2>/dev/null || echo "ensurepip already available"
+        python -m pip install --upgrade pip
         
         # Add NVIDIA package repository
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.0-1_all.deb || \
@@ -54,13 +66,15 @@ jobs:
         echo "⚠️ CUDA installation failed - will build CPU-only version"
         
         # Set CUDA paths
-        export CUDA_HOME=/usr/local/cuda
-        export PATH=$CUDA_HOME/bin:$PATH
-        export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-        
-        echo "CUDA_HOME=$CUDA_HOME" >> $GITHUB_ENV
-        echo "PATH=$CUDA_HOME/bin:$PATH" >> $GITHUB_ENV
-        echo "LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        for cuda_path in /usr/local/cuda /usr/local/cuda-12.5 /usr/local/cuda-12.0; do
+          if [ -d "$cuda_path" ]; then
+            echo "CUDA_HOME=$cuda_path" >> $GITHUB_ENV
+            echo "$cuda_path/bin" >> $GITHUB_PATH
+            echo "LD_LIBRARY_PATH=$cuda_path/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+            echo "CPATH=$cuda_path/include:$CPATH" >> $GITHUB_ENV
+            break
+          fi
+        done
 
     - name: Install system dependencies
       run: |
@@ -71,11 +85,24 @@ jobs:
           libgmp-dev \
           libmpfr-dev \
           libfplll-dev \
+          libfplll8 \
           git \
-          pkg-config
+          pkg-config \
+          python3-dev \
+          cython3
+          
+        # Ensure fpylll system dependencies are available
+        sudo apt-get install -y \
+          libeigen3-dev \
+          libboost-dev \
+          autotools-dev \
+          autoconf \
+          libtool
 
-    - name: Upgrade pip and build tools
+    - name: Ensure pip and upgrade build tools
       run: |
+        # Ensure pip is available
+        python -m ensurepip --upgrade 2>/dev/null || echo "ensurepip already available"
         python -m pip install --upgrade pip
         python -m pip install --upgrade wheel setuptools build
 
@@ -87,6 +114,11 @@ jobs:
         cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
         make -j$(nproc)
         sudo make install
+
+    - name: Install fpylll dependency
+      run: |
+        echo "Installing fpylll..."
+        python -m pip install fpylll || echo "⚠️ fpylll installation failed, will try during build"
 
     - name: Verify CUDA installation
       run: |
@@ -200,12 +232,32 @@ jobs:
         method: 'local'
       continue-on-error: true
 
+    - name: Set CUDA environment for validation
+      if: steps.cuda-install-validation.outcome == 'success'
+      run: |
+        echo "CUDA_HOME=${{ steps.cuda-install-validation.outputs.CUDA_PATH }}" >> $GITHUB_ENV
+        echo "${{ steps.cuda-install-validation.outputs.CUDA_PATH }}/bin" >> $GITHUB_PATH
+        echo "LD_LIBRARY_PATH=${{ steps.cuda-install-validation.outputs.CUDA_PATH }}/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "CPATH=${{ steps.cuda-install-validation.outputs.CUDA_PATH }}/include:$CPATH" >> $GITHUB_ENV
+
     - name: Fallback CUDA installation for validation
       if: steps.cuda-install-validation.outcome == 'failure'
       run: |
         echo "CUDA action failed, trying manual installation..."
+        python -m ensurepip --upgrade 2>/dev/null || echo "ensurepip already available"
+        python -m pip install --upgrade pip
         sudo apt-get update || true
         sudo apt-get install -y nvidia-cuda-toolkit || echo "⚠️ CUDA toolkit installation failed"
+        
+        # Set CUDA paths for fallback
+        for cuda_path in /usr/local/cuda /usr/lib/nvidia-cuda-toolkit; do
+          if [ -d "$cuda_path" ]; then
+            echo "CUDA_HOME=$cuda_path" >> $GITHUB_ENV
+            echo "$cuda_path/bin" >> $GITHUB_PATH || true
+            echo "CPATH=$cuda_path/include:$CPATH" >> $GITHUB_ENV
+            break
+          fi
+        done
 
     - name: Install system dependencies
       run: |
@@ -214,12 +266,18 @@ jobs:
           build-essential \
           libgmp-dev \
           libmpfr-dev \
-          libfplll-dev
+          libfplll-dev \
+          libfplll8 \
+          python3-dev \
+          cython3 \
+          libeigen3-dev \
+          libboost-dev
 
     - name: Install build tools
       run: |
+        python -m ensurepip --upgrade 2>/dev/null || echo "ensurepip already available"
         python -m pip install --upgrade pip
-        python -m pip install build twine check-manifest
+        python -m pip install build twine check-manifest fpylll
 
     - name: Install parallel-hashmap
       run: |

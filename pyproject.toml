@@ -14,7 +14,7 @@ name = "g6k-gpu-tensor"
 description = "G6K GPU Tensor - Advanced Lattice Sieving on GPUs with Tensor Cores"
 readme = "README.rst"
 requires-python = ">=3.8"
-license = {text = "GPL-2.0"}
+license = "GPL-2.0-or-later"
 authors = [
     {name = "Léo Ducas, Marc Stevens, Wessel van Woerden"},
     {email = "l.ducas@cwi.nl"}
@@ -25,7 +25,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Security :: Cryptography",
-    "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
