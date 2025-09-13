@@ -27,6 +27,13 @@ jobs:
       with:
         python-version: "3.11"
 
+    - name: Install CUDA Toolkit
+      uses: Jimver/cuda-toolkit@v0.2.11
+      with:
+        cuda: '12.0'
+        method: 'network'
+        sub-packages: '["nvcc", "cudart", "cublas", "curand", "cusparse"]'
+
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -49,11 +56,10 @@ jobs:
         make -j$(nproc)
         sudo make install
 
-    - name: Build distributions
-      env:
-        G6K_ENABLE_CUDA: "0"  # Build CPU-only for wider compatibility
+    - name: Build GPU-enabled distributions
       run: |
-        echo "Building source and wheel distributions..."
+        echo "Building GPU-enabled source and wheel distributions..."
+        echo "CUDA version: $(nvcc --version)"
         python -m build
         
         echo "Built files:"
@@ -84,24 +90,34 @@ jobs:
           echo "Changes since $PREV_TAG:" > release_notes.md
           git log --oneline --pretty=format:"- %s" $PREV_TAG..$TAG_NAME >> release_notes.md
         else
-          echo "Initial release of G6K-GPU-Tensor" > release_notes.md
+          echo "# G6K-GPU-Tensor: Advanced Lattice Sieving with GPU Acceleration" > release_notes.md
           echo "" >> release_notes.md
-          echo "## Features:" >> release_notes.md
-          echo "- PEP 517/518 compliant Python packaging" >> release_notes.md
-          echo "- CUDA GPU acceleration with Tensor Core support" >> release_notes.md
-          echo "- Advanced lattice sieving algorithms" >> release_notes.md
-          echo "- Automated dependency management" >> release_notes.md
-          echo "- Cross-platform compatibility (Linux)" >> release_notes.md
+          echo "🚀 **GPU-Accelerated Lattice Sieving Library**" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 🎯 Core Features:" >> release_notes.md
+          echo "- **CUDA GPU Acceleration**: Full Tensor Core support for high-performance sieving" >> release_notes.md
+          echo "- **Modern Python Packaging**: PEP 517/518 compliant with pip install -e ." >> release_notes.md
+          echo "- **Advanced Algorithms**: State-of-the-art lattice sieving implementations" >> release_notes.md
+          echo "- **Automatic CUDA Detection**: Seamless GPU compilation and fallback" >> release_notes.md
+          echo "- **Flexible Configuration**: Custom dimension limits via rebuild.sh" >> release_notes.md
+          echo "- **Dependency Management**: Automated fpylll, FPLLL, parallel-hashmap setup" >> release_notes.md
         fi
         
         echo "" >> release_notes.md
-        echo "## Installation:" >> release_notes.md
+        echo "## 🛠️ Installation:" >> release_notes.md
         echo '```bash' >> release_notes.md
+        echo "# Requires NVIDIA CUDA Toolkit (11.8+ or 12.0+)" >> release_notes.md
         echo "pip install -e ." >> release_notes.md
+        echo "" >> release_notes.md
+        echo "# Custom maximum dimension:" >> release_notes.md
+        echo "./rebuild.sh -m 160 --fast" >> release_notes.md
         echo '```' >> release_notes.md
         echo "" >> release_notes.md
-        echo "## GPU Support:" >> release_notes.md
-        echo "For CUDA acceleration, ensure NVIDIA CUDA Toolkit is installed." >> release_notes.md
+        echo "## 🚀 GPU Requirements:" >> release_notes.md
+        echo "- **NVIDIA GPU**: Compute Capability 6.0+ (Pascal, Volta, Turing, Ampere, Ada Lovelace)" >> release_notes.md
+        echo "- **CUDA Toolkit**: Version 11.8 or 12.0+ with nvcc compiler" >> release_notes.md
+        echo "- **Tensor Cores**: Supported on Volta V100, Turing RTX 20xx, Ampere RTX 30xx/40xx" >> release_notes.md
+        echo "- **Memory**: 8GB+ VRAM recommended for large dimension challenges" >> release_notes.md
         echo "" >> release_notes.md
         echo "See [INSTALL.md](INSTALL.md) for detailed installation instructions." >> release_notes.md
         

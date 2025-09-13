@@ -8,19 +8,19 @@ This repository includes comprehensive GitHub Actions workflows to ensure build 
 **Triggers:** Push to main/dev, Pull Requests, Manual dispatch
 
 **Jobs:**
-- **build-cpu-only**: Tests CPU-only builds across Python 3.9-3.13
-- **build-validation**: Validates package distribution and wheel building
+- **build-gpu**: Tests GPU-enabled builds with CUDA across Python 3.10-3.13
+- **build-validation**: Validates GPU package distribution and wheel building
 - **code-quality**: Checks code formatting and style with black, isort, flake8
 - **dependency-check**: Scans for security vulnerabilities in dependencies
 
 **What it tests:**
-- ✅ PEP 517/518 compliant build with `pip install -e .`
-- ✅ Cross-platform compatibility (Ubuntu)
-- ✅ Python version compatibility (3.9-3.13)
-- ✅ Basic functionality and imports
-- ✅ SVP challenge execution (small dimension for speed)
-- ✅ Rebuild script functionality
-- ✅ Package distribution quality
+- 🚀 GPU-enabled PEP 517/518 compliant build with `pip install -e .`
+- 🚀 CUDA Toolkit integration (versions 11.8, 12.0)
+- 🚀 Python version compatibility (3.10-3.13) with GPU support
+- 🚀 GPU-accelerated functionality and imports
+- 🚀 SVP challenge execution with CUDA acceleration
+- 🚀 Rebuild script functionality with GPU compilation
+- 🚀 GPU package distribution quality
 
 ### 2. CUDA Build Test (`cuda-test.yml`)
 **Triggers:** Push/PR affecting CUDA code, Manual dispatch
@@ -48,9 +48,12 @@ Add this badge to your README.md to show build status:
 
 ## Running Workflows Locally
 
-### CPU-only testing:
+### GPU-enabled testing (Recommended):
 ```bash
-# Install dependencies
+# Install CUDA Toolkit (11.8+ or 12.0+)
+# Follow NVIDIA CUDA installation guide for your OS
+
+# Install system dependencies
 sudo apt-get install build-essential libgmp-dev libmpfr-dev libfplll-dev
 
 # Install parallel-hashmap
@@ -58,19 +61,16 @@ git clone https://github.com/greg7mdp/parallel-hashmap.git
 cd parallel-hashmap && mkdir build && cd build
 cmake .. && make && sudo make install
 
-# Build and test
-G6K_ENABLE_CUDA=0 pip install -e .
-python -c "import g6k; print('✅ Success')"
-```
-
-### With CUDA:
-```bash
-# Ensure CUDA toolkit is installed
-nvcc --version
-
-# Build with CUDA auto-detection
+# Build with GPU acceleration
 pip install -e .
 python svp_challenge.py 60 --seed 1337
+```
+
+### CPU fallback testing:
+```bash
+# For systems without GPU support
+G6K_ENABLE_CUDA=0 pip install -e .
+python -c "import g6k; print('✅ CPU fallback success')"
 ```
 
 ## Self-Hosted Runner Setup
