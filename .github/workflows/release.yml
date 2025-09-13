@@ -30,7 +30,7 @@ jobs:
     - name: Install CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.11
       with:
-        cuda: '12.0'
+        cuda: '12.0.0'
         method: 'network'
         sub-packages: '["nvcc", "cudart", "cublas", "curand", "cusparse"]'
 
@@ -106,7 +106,7 @@ jobs:
         echo "" >> release_notes.md
         echo "## 🛠️ Installation:" >> release_notes.md
         echo '```bash' >> release_notes.md
-        echo "# Requires NVIDIA CUDA Toolkit (11.8+ or 12.0+)" >> release_notes.md
+        echo "# Requires NVIDIA CUDA Toolkit (11.8.0+ or 12.0.0+)" >> release_notes.md
         echo "pip install -e ." >> release_notes.md
         echo "" >> release_notes.md
         echo "# Custom maximum dimension:" >> release_notes.md
@@ -115,7 +115,7 @@ jobs:
         echo "" >> release_notes.md
         echo "## 🚀 GPU Requirements:" >> release_notes.md
         echo "- **NVIDIA GPU**: Compute Capability 6.0+ (Pascal, Volta, Turing, Ampere, Ada Lovelace)" >> release_notes.md
-        echo "- **CUDA Toolkit**: Version 11.8 or 12.0+ with nvcc compiler" >> release_notes.md
+        echo "- **CUDA Toolkit**: Version 11.8.0 or 12.0.0+ with nvcc compiler" >> release_notes.md
         echo "- **Tensor Cores**: Supported on Volta V100, Turing RTX 20xx, Ampere RTX 30xx/40xx" >> release_notes.md
         echo "- **Memory**: 8GB+ VRAM recommended for large dimension challenges" >> release_notes.md
         echo "" >> release_notes.md
