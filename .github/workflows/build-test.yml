@@ -375,11 +375,11 @@ jobs:
         sys.path.insert(0, ".")
         
         print("Testing basic G6K functionality...")
-        from g6k.utils.util import load_svp_challenge
+        from g6k.utils.util import load_svpchallenge_and_randomize
         from g6k import Siever
         
         # Load a small challenge matrix
-        A = load_svp_challenge(40, seed=1337)
+        A, bkz = load_svpchallenge_and_randomize(40, seed=1337)
         print("✅ Loaded SVP challenge matrix, shape: {}x{}".format(A.nrows, A.ncols))
         
         # Initialize siever (will detect no GPU drivers and fall back to CPU)
