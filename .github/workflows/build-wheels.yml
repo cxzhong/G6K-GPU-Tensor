@@ -55,14 +55,17 @@ jobs:
           cuda-wheel-v3-
 
     - name: Install CUDA Toolkit ${{ matrix.cuda-version }}
+      id: cuda-install
       if: steps.cache-cuda.outputs.cache-hit != 'true'
       uses: Jimver/cuda-toolkit@v0.2.27
       with:
         cuda: ${{ matrix.cuda-version }}
         method: 'local'
         use-github-cache: false
-        log-file-suffix: '-wheel-py${{ matrix.python-version }}'
+        log-file-suffix: '-py${{ matrix.python-version }}-${{ github.run_id }}'
         non-cuda-sub-packages: '[]'
+      continue-on-error: true
+      timeout-minutes: 20
 
     - name: Set CUDA environment variables
       run: |
@@ -198,24 +201,37 @@ jobs:
           find /tmp/wheel_check/ -name "*.so" -exec file {} \;
         fi
 
-    - name: Rename wheel with CUDA tag
+    - name: Add CUDA metadata to wheel
       run: |
         cd dist
         # Find the built wheel
         ORIGINAL_WHEEL=$(ls *.whl | head -n1)
         
-        # Extract wheel components
-        WHEEL_NAME=$(basename "$ORIGINAL_WHEEL" .whl)
+        # Extract wheel components for proper CUDA tagging
+        WHEEL_BASENAME=$(basename "$ORIGINAL_WHEEL" .whl)
         
-        # Create new wheel name with CUDA tag
-        NEW_WHEEL_NAME=$(echo "$WHEEL_NAME" | sed "s/linux_x86_64/linux_x86_64+$CUDA_TAG/")
-        NEW_WHEEL="${NEW_WHEEL_NAME}.whl"
-        
-        # Rename the wheel
-        mv "$ORIGINAL_WHEEL" "$NEW_WHEEL"
-        
-        echo "Renamed wheel: $ORIGINAL_WHEEL -> $NEW_WHEEL"
-        echo "WHEEL_NAME=$NEW_WHEEL" >> $GITHUB_ENV
+        # Instead of modifying platform tag, we'll modify the version to include CUDA info
+        # This is a more compatible approach that pip can handle
+        if [[ "$WHEEL_BASENAME" =~ ^(.+)-([0-9]+\.[0-9]+.*)-(.+)-(.+)-(.+)$ ]]; then
+          PKG_NAME="${BASH_REMATCH[1]}"
+          VERSION="${BASH_REMATCH[2]}"
+          PYTHON_TAG="${BASH_REMATCH[3]}"
+          ABI_TAG="${BASH_REMATCH[4]}"
+          PLATFORM_TAG="${BASH_REMATCH[5]}"
+          
+          # Add CUDA version to the package version (not platform)
+          NEW_VERSION="${VERSION}+${CUDA_TAG}"
+          NEW_WHEEL_NAME="${PKG_NAME}-${NEW_VERSION}-${PYTHON_TAG}-${ABI_TAG}-${PLATFORM_TAG}.whl"
+          
+          # Rename the wheel
+          mv "$ORIGINAL_WHEEL" "$NEW_WHEEL_NAME"
+          
+          echo "Renamed wheel: $ORIGINAL_WHEEL -> $NEW_WHEEL_NAME"
+          echo "WHEEL_NAME=$NEW_WHEEL_NAME" >> $GITHUB_ENV
+        else
+          echo "Could not parse wheel name: $ORIGINAL_WHEEL"
+          echo "WHEEL_NAME=$ORIGINAL_WHEEL" >> $GITHUB_ENV
+        fi
 
     - name: Test wheel installation and basic functionality
       run: |
@@ -223,8 +239,8 @@ jobs:
         python -m venv test_env
         source test_env/bin/activate
         
-        # Install the wheel
-        pip install dist/*.whl
+        # Install the wheel with force reinstall to handle version conflicts
+        pip install --force-reinstall dist/*.whl
         
         # Test basic imports
         python -c "
