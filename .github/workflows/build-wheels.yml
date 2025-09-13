@@ -62,10 +62,12 @@ jobs:
         cuda: ${{ matrix.cuda-version }}
         method: 'local'
         use-github-cache: false
-        log-file-suffix: '-py${{ matrix.python-version }}-${{ github.run_id }}'
+        log-file-suffix: '-wheel-py${{ matrix.python-version }}-${{ github.run_number }}'
         non-cuda-sub-packages: '[]'
       continue-on-error: true
       timeout-minutes: 20
+      env:
+        CUDA_INSTALL_LOG: '/tmp/cuda-install-wheel-py${{ matrix.python-version }}-${{ github.run_number }}.log'
 
     - name: Set CUDA environment variables
       run: |
@@ -106,8 +108,93 @@ jobs:
         fi
         
         # Verify CUDA installation
-        nvcc --version
-        echo "CUDA_HOME: $CUDA_HOME"
+        if command -v nvcc >/dev/null 2>&1; then
+          nvcc --version
+          echo "CUDA_HOME: $CUDA_HOME"
+        else
+          echo "⚠️ CUDA verification failed, will attempt fallback installation"
+        fi
+
+    - name: Fallback CUDA installation (if needed)
+      if: steps.cuda-install.outcome == 'failure' || steps.cuda-install.outcome == 'skipped'
+      run: |
+        echo "Attempting fallback CUDA installation..."
+        
+        # Method: Try direct download and install
+        CUDA_VERSION="${{ matrix.cuda-version }}"
+        CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1)
+        CUDA_MINOR=$(echo $CUDA_VERSION | cut -d. -f2)
+        
+        echo "Attempting direct CUDA installation for version $CUDA_VERSION"
+        
+        # Add NVIDIA package repository
+        OS_VERSION=$(lsb_release -rs | tr -d '.')
+        ARCH=$(uname -m)
+        
+        if [ "$OS_VERSION" = "2404" ]; then
+          REPO_VERSION="ubuntu2404"
+        elif [ "$OS_VERSION" = "2204" ]; then
+          REPO_VERSION="ubuntu2204"
+        else
+          REPO_VERSION="ubuntu2204"
+        fi
+        
+        echo "Using repository: $REPO_VERSION for OS version $OS_VERSION"
+        
+        # Download and install keyring
+        wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/${REPO_VERSION}/${ARCH}/cuda-keyring_1.1-1_all.deb" || {
+          echo "⚠️ Failed to download keyring, trying alternative..."
+          wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/${ARCH}/cuda-keyring_1.1-1_all.deb"
+        }
+        
+        sudo dpkg -i /tmp/cuda-keyring.deb 2>/dev/null || echo "Keyring install may have failed, continuing..."
+        sudo apt-get update -qq || echo "apt update failed, continuing..."
+        
+        # Try installing CUDA packages
+        if [ "$CUDA_MAJOR" = "13" ]; then
+          sudo apt-get install -y cuda-nvcc-13-0 cuda-toolkit-13-0 2>/dev/null || \
+          sudo apt-get install -y nvidia-cuda-toolkit 2>/dev/null || \
+          echo "⚠️ All CUDA installation methods failed"
+        else
+          sudo apt-get install -y cuda-nvcc-12-8 cuda-toolkit-12-8 2>/dev/null || \
+          sudo apt-get install -y nvidia-cuda-toolkit 2>/dev/null || \
+          echo "⚠️ All CUDA installation methods failed"
+        fi
+        
+        # Re-verify CUDA installation
+        CUDA_FOUND=false
+        CUDA_PATHS=(
+          "/usr/local/cuda"
+          "/usr/local/cuda-${CUDA_MAJOR}.${CUDA_MINOR}"
+          "/usr/local/cuda-${CUDA_MAJOR}-${CUDA_MINOR}"
+          "/usr/local/cuda-${CUDA_MAJOR}.0"
+          "/usr"
+        )
+        
+        for cuda_path in "${CUDA_PATHS[@]}"; do
+          if [ -f "$cuda_path/bin/nvcc" ]; then
+            echo "✅ Found CUDA at: $cuda_path"
+            echo "CUDA_HOME=$cuda_path" >> $GITHUB_ENV
+            echo "$cuda_path/bin" >> $GITHUB_PATH
+            echo "LD_LIBRARY_PATH=$cuda_path/lib64:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+            echo "CPATH=$cuda_path/include:${CPATH}" >> $GITHUB_ENV
+            CUDA_FOUND=true
+            break
+          fi
+        done
+        
+        if [ "$CUDA_FOUND" = false ] && command -v nvcc >/dev/null 2>&1; then
+          echo "✅ Found system nvcc: $(which nvcc)"
+          CUDA_HOME=$(dirname $(dirname $(which nvcc)))
+          echo "CUDA_HOME=$CUDA_HOME" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+          CUDA_FOUND=true
+        fi
+        
+        if [ "$CUDA_FOUND" = false ]; then
+          echo "❌ CUDA installation failed completely"
+          exit 1
+        fi
 
     - name: Install system dependencies
       run: |
@@ -210,8 +297,7 @@ jobs:
         # Extract wheel components for proper CUDA tagging
         WHEEL_BASENAME=$(basename "$ORIGINAL_WHEEL" .whl)
         
-        # Instead of modifying platform tag, we'll modify the version to include CUDA info
-        # This is a more compatible approach that pip can handle
+        # Parse wheel name to handle existing local version identifiers
         if [[ "$WHEEL_BASENAME" =~ ^(.+)-([0-9]+\.[0-9]+.*)-(.+)-(.+)-(.+)$ ]]; then
           PKG_NAME="${BASH_REMATCH[1]}"
           VERSION="${BASH_REMATCH[2]}"
@@ -219,17 +305,29 @@ jobs:
           ABI_TAG="${BASH_REMATCH[4]}"
           PLATFORM_TAG="${BASH_REMATCH[5]}"
           
-          # Add CUDA version to the package version (not platform)
-          NEW_VERSION="${VERSION}+${CUDA_TAG}"
+          echo "Original version: $VERSION"
+          
+          # Check if version already has a local version identifier (contains +)
+          if [[ "$VERSION" == *"+"* ]]; then
+            # Version already has local identifier, append CUDA tag to it
+            NEW_VERSION="${VERSION}.${CUDA_TAG}"
+          else
+            # No local identifier, add CUDA tag as local identifier
+            NEW_VERSION="${VERSION}+${CUDA_TAG}"
+          fi
+          
           NEW_WHEEL_NAME="${PKG_NAME}-${NEW_VERSION}-${PYTHON_TAG}-${ABI_TAG}-${PLATFORM_TAG}.whl"
+          
+          echo "New version: $NEW_VERSION"
+          echo "Renaming: $ORIGINAL_WHEEL -> $NEW_WHEEL_NAME"
           
           # Rename the wheel
           mv "$ORIGINAL_WHEEL" "$NEW_WHEEL_NAME"
           
-          echo "Renamed wheel: $ORIGINAL_WHEEL -> $NEW_WHEEL_NAME"
           echo "WHEEL_NAME=$NEW_WHEEL_NAME" >> $GITHUB_ENV
         else
           echo "Could not parse wheel name: $ORIGINAL_WHEEL"
+          echo "Using original wheel without CUDA tag"
           echo "WHEEL_NAME=$ORIGINAL_WHEEL" >> $GITHUB_ENV
         fi
 
@@ -263,7 +361,7 @@ jobs:
       if: inputs.upload_wheels != false
       uses: actions/upload-artifact@v4
       with:
-        name: wheels-py${{ matrix.python-version }}-cuda${{ matrix.cuda-version }}-${{ github.run_id }}
+        name: wheel-py${{ matrix.python-version }}-cuda${{ matrix.cuda-version }}-${{ github.run_number }}-${{ github.run_attempt }}
         path: |
           dist/*.whl
           dist/*.tar.gz
@@ -273,7 +371,7 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: build-failure-logs-py${{ matrix.python-version }}-cuda${{ matrix.cuda-version }}-${{ github.run_id }}
+        name: wheel-failure-py${{ matrix.python-version }}-cuda${{ matrix.cuda-version }}-${{ github.run_number }}-${{ github.run_attempt }}
         path: |
           build.log
           /tmp/wheel_check/
@@ -291,7 +389,7 @@ jobs:
     - name: Download all wheel artifacts
       uses: actions/download-artifact@v4
       with:
-        pattern: wheels-*
+        pattern: wheel-*
         merge-multiple: true
         path: collected_wheels/
 
@@ -303,7 +401,7 @@ jobs:
     - name: Upload combined wheel collection
       uses: actions/upload-artifact@v4
       with:
-        name: all-wheels-${{ github.run_id }}
+        name: all-wheels-${{ github.run_number }}-${{ github.run_attempt }}
         path: collected_wheels/
         retention-days: 90
 
@@ -322,7 +420,7 @@ jobs:
     - name: Download all wheels
       uses: actions/download-artifact@v4
       with:
-        name: all-wheels-${{ github.run_id }}
+        name: all-wheels-${{ github.run_number }}-${{ github.run_attempt }}
         path: dist/
 
     - name: Verify wheels before publishing
