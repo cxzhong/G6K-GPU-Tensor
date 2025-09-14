@@ -6,8 +6,8 @@
 G6K - GPU Tensor
 ******************************
 
-Before Install you can use ``sudo apt install libqd-dev libparallel-hashmap-dev`` to support the float type `qd`, `dd`, `mpfr` and `parallel-hashmap`.
-And, you can install `fplll` with `sudo apt install libfplll-dev`.
+Before Install you can use ``sudo apt install libqd-dev libparallel-hashmap-dev`` to support the float type ```qd```, ```dd```, ```mpfr``` and ```parallel-hashmap```.
+And, you can install ```fplll``` with ```sudo apt install libfplll-dev```.
 
 G6K is an open-source C++ and Python 3 library that implements several Sieve algorithms to be used in more advanced lattice reduction tasks. It follows the stateful machine framework from: 
 
