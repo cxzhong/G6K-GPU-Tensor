@@ -1,5 +1,3 @@
-> :warning: **Update:** It is recommended to use the dev branch.
-
 .. image:: https://github.com/cxzhong/G6K-GPU-Tensor/actions/workflows/build-test.yml/badge.svg
    :target: https://github.com/cxzhong/G6K-GPU-Tensor/actions/workflows/build-test.yml
    :alt: Build Status
@@ -8,8 +6,8 @@
 G6K - GPU Tensor
 ******************************
 
-Before Install you can use ``sudo apt install libqd-dev`` to support the float type qd and dd.
-I finish tests on sm89 GPUs and make some errors fixs in Ubuntu 25.04, Cython 3.1.2, GCC13.3, CUDA12.9 and Python 3.13.3.
+Before Install you can use ``sudo apt install libqd-dev libparallel-hashmap-dev`` to support the float type ``qd``, ``dd``, ``mpfr`` and ``parallel-hashmap``.
+And, you can install ``fplll`` with ``sudo apt install libfplll-dev``.
 
 G6K is an open-source C++ and Python 3 library that implements several Sieve algorithms to be used in more advanced lattice reduction tasks. It follows the stateful machine framework from: 
 
@@ -53,6 +51,16 @@ Otherwise, you will need fplll and fpylll already installed and build the G6K Cy
 
 Remove ``-f`` option to compile faster (fewer optimisations). 
 The ``-y`` option significantly reduces the memory footprint, but disables the standard cpu-only sieves. See ``rebuild.sh`` for more options.
+
+Otherwise, you can install with uv:
+
+.. code-block:: bash
+
+    uv venv
+    uv pip install -e .
+    source .venv/bin/activate
+    ./rebuild.sh -f -y # you also can use -m MAX_SIEVING_DIM \leqslant 167
+
 
 
 Code examples
