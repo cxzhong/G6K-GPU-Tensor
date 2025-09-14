@@ -1,0 +1,483 @@
+name: Build Wheels with CUDA Support
+
+on:
+  push:
+    branches: [ main, dev ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+    inputs:
+      upload_wheels:
+        description: 'Upload wheels to artifacts'
+        required: false
+        default: true
+        type: boolean
+      publish_pypi:
+        description: 'Publish to PyPI (only for maintainers)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-wheels:
+    name: Build wheels for Python ${{ matrix.python-version }} + CUDA ${{ matrix.cuda-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        cuda-version: ["13.0.0"]
+        
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0  # Full history for version detection
+        submodules: recursive
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache CUDA Installation
+      id: cache-cuda
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local/cuda*
+          ~/.cache/cuda
+        key: cuda-${{ matrix.cuda-version }}-${{ runner.os }}-${{ runner.arch }}-wheel-v3
+        restore-keys: |
+          cuda-${{ matrix.cuda-version }}-${{ runner.os }}-
+          cuda-wheel-v3-
+
+    - name: Install CUDA Toolkit ${{ matrix.cuda-version }}
+      id: cuda-install
+      if: steps.cache-cuda.outputs.cache-hit != 'true'
+      uses: Jimver/cuda-toolkit@v0.2.27
+      with:
+        cuda: ${{ matrix.cuda-version }}
+        method: 'local'
+        use-github-cache: false
+        log-file-suffix: '-wheel-py${{ matrix.python-version }}-${{ github.run_number }}'
+        non-cuda-sub-packages: '[]'
+      continue-on-error: true
+      timeout-minutes: 20
+      env:
+        CUDA_INSTALL_LOG: '/tmp/cuda-install-wheel-py${{ matrix.python-version }}-${{ github.run_number }}.log'
+
+    - name: Set CUDA environment variables
+      run: |
+        # Find CUDA installation
+        CUDA_PATHS=(
+          "/usr/local/cuda"
+          "/usr/local/cuda-${{ matrix.cuda-version }}"
+          "/usr/local/cuda-$(echo ${{ matrix.cuda-version }} | cut -d. -f1-2)"
+          "/opt/cuda"
+        )
+        
+        CUDA_FOUND=false
+        for cuda_path in "${CUDA_PATHS[@]}"; do
+          if [ -f "$cuda_path/bin/nvcc" ]; then
+            echo "✅ Found CUDA at: $cuda_path"
+            echo "CUDA_HOME=$cuda_path" >> $GITHUB_ENV
+            echo "$cuda_path/bin" >> $GITHUB_PATH
+            echo "LD_LIBRARY_PATH=$cuda_path/lib64:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+            echo "CPATH=$cuda_path/include:${CPATH}" >> $GITHUB_ENV
+            CUDA_FOUND=true
+            break
+          fi
+        done
+        
+        # Fallback to system nvcc if available
+        if [ "$CUDA_FOUND" = false ] && command -v nvcc >/dev/null 2>&1; then
+          NVCC_PATH=$(which nvcc)
+          CUDA_HOME=$(dirname $(dirname "$NVCC_PATH"))
+          echo "✅ Found system CUDA at: $CUDA_HOME"
+          echo "CUDA_HOME=$CUDA_HOME" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$CUDA_HOME/lib64:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+          CUDA_FOUND=true
+        fi
+        
+        if [ "$CUDA_FOUND" = false ]; then
+          echo "❌ CUDA installation not found"
+          exit 1
+        fi
+        
+        # Verify CUDA installation
+        if command -v nvcc >/dev/null 2>&1; then
+          nvcc --version
+          echo "CUDA_HOME: $CUDA_HOME"
+        else
+          echo "⚠️ CUDA verification failed, will attempt fallback installation"
+        fi
+
+    - name: Fallback CUDA installation (if needed)
+      if: steps.cuda-install.outcome == 'failure' || steps.cuda-install.outcome == 'skipped'
+      run: |
+        echo "Attempting fallback CUDA installation..."
+        
+        # Method: Try direct download and install
+        CUDA_VERSION="${{ matrix.cuda-version }}"
+        CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1)
+        CUDA_MINOR=$(echo $CUDA_VERSION | cut -d. -f2)
+        
+        echo "Attempting direct CUDA installation for version $CUDA_VERSION"
+        
+        # Add NVIDIA package repository
+        OS_VERSION=$(lsb_release -rs | tr -d '.')
+        ARCH=$(uname -m)
+        
+        if [ "$OS_VERSION" = "2404" ]; then
+          REPO_VERSION="ubuntu2404"
+        elif [ "$OS_VERSION" = "2204" ]; then
+          REPO_VERSION="ubuntu2204"
+        else
+          REPO_VERSION="ubuntu2204"
+        fi
+        
+        echo "Using repository: $REPO_VERSION for OS version $OS_VERSION"
+        
+        # Download and install keyring
+        wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/${REPO_VERSION}/${ARCH}/cuda-keyring_1.1-1_all.deb" || {
+          echo "⚠️ Failed to download keyring, trying alternative..."
+          wget -O /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/${ARCH}/cuda-keyring_1.1-1_all.deb"
+        }
+        
+        sudo dpkg -i /tmp/cuda-keyring.deb 2>/dev/null || echo "Keyring install may have failed, continuing..."
+        sudo apt-get update -qq || echo "apt update failed, continuing..."
+        
+        # Try installing CUDA packages (only CUDA 13.0)
+        sudo apt-get install -y cuda-nvcc-13-0 cuda-toolkit-13-0 2>/dev/null || \
+        sudo apt-get install -y nvidia-cuda-toolkit 2>/dev/null || \
+        echo "⚠️ All CUDA installation methods failed"
+        
+        # Re-verify CUDA installation
+        CUDA_FOUND=false
+        CUDA_PATHS=(
+          "/usr/local/cuda"
+          "/usr/local/cuda-${CUDA_MAJOR}.${CUDA_MINOR}"
+          "/usr/local/cuda-${CUDA_MAJOR}-${CUDA_MINOR}"
+          "/usr/local/cuda-${CUDA_MAJOR}.0"
+          "/usr"
+        )
+        
+        for cuda_path in "${CUDA_PATHS[@]}"; do
+          if [ -f "$cuda_path/bin/nvcc" ]; then
+            echo "✅ Found CUDA at: $cuda_path"
+            echo "CUDA_HOME=$cuda_path" >> $GITHUB_ENV
+            echo "$cuda_path/bin" >> $GITHUB_PATH
+            echo "LD_LIBRARY_PATH=$cuda_path/lib64:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+            echo "CPATH=$cuda_path/include:${CPATH}" >> $GITHUB_ENV
+            CUDA_FOUND=true
+            break
+          fi
+        done
+        
+        if [ "$CUDA_FOUND" = false ] && command -v nvcc >/dev/null 2>&1; then
+          echo "✅ Found system nvcc: $(which nvcc)"
+          CUDA_HOME=$(dirname $(dirname $(which nvcc)))
+          echo "CUDA_HOME=$CUDA_HOME" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+          CUDA_FOUND=true
+        fi
+        
+        if [ "$CUDA_FOUND" = false ]; then
+          echo "❌ CUDA installation failed completely"
+          exit 1
+        fi
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libgmp-dev \
+          libmpfr-dev \
+          libfplll-dev \
+          libfplll8 \
+          git \
+          pkg-config \
+          python3-dev \
+          cython3 \
+          libeigen3-dev \
+          libboost-dev \
+          autotools-dev \
+          autoconf \
+          libtool
+
+    - name: Install parallel-hashmap dependency
+      run: |
+        sudo apt-get install -y libparallel-hashmap-dev || {
+          echo "Installing parallel-hashmap from source..."
+          git clone https://github.com/greg7mdp/parallel-hashmap.git /tmp/parallel-hashmap
+          cd /tmp/parallel-hashmap
+          mkdir build && cd build
+          cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+          make -j$(nproc)
+          sudo make install
+        }
+
+    - name: Upgrade pip and install build tools
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        python -m pip install --upgrade \
+          cython \
+          numpy \
+          cibuildwheel \
+          build \
+          twine
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install \
+          fpylll \
+          scipy \
+          begins \
+          requests \
+          multiprocessing-logging \
+          cysignals
+
+    - name: Set wheel platform tag for CUDA version
+      run: |
+        # Create CUDA-specific wheel tags (CUDA 13.0 only)
+        CUDA_TAG="cu130"
+        PYTHON_TAG="cp$(echo ${{ matrix.python-version }} | sed 's/\.//')"
+        
+        echo "CUDA_TAG=$CUDA_TAG" >> $GITHUB_ENV
+        echo "PYTHON_TAG=$PYTHON_TAG" >> $GITHUB_ENV
+        echo "WHEEL_TAG=${PYTHON_TAG}-${PYTHON_TAG}-linux_x86_64_${CUDA_TAG}" >> $GITHUB_ENV
+        
+        echo "Building wheel with CUDA 13.0 tag: ${WHEEL_TAG}"
+
+    - name: Clean pre-compiled extensions
+      run: |
+        # Remove any pre-compiled extensions that might be for wrong Python version
+        find . -name "*.so" -type f -delete
+        find . -name "*.pyd" -type f -delete
+        find . -name "*.cpp" -path "*/g6k/*" -delete
+        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+        find . -name "*.pyc" -type f -delete
+        
+        # Remove build directories to force complete rebuild
+        rm -rf build/ dist/ *.egg-info/
+        
+        # Remove any Cython generated C files to force regeneration
+        find g6k/ -name "*.c" -delete
+        
+        echo "Cleaned pre-compiled extensions and build artifacts for fresh build"
+        
+        # List remaining Python/Cython source files to verify
+        echo "Remaining g6k source files:"
+        find g6k/ -type f \( -name "*.py" -o -name "*.pyx" -o -name "*.pxd" \) | sort
+
+    - name: Build wheel
+      run: |
+        # Set environment variables for CUDA-enabled build
+        export G6K_ENABLE_CUDA=1
+        export CUDA_ARCHITECTURES="70;75;80;86;89;90"
+        export NVCC_FLAGS="-O3 -lineinfo"
+        
+        # Force rebuild of Cython extensions
+        export CYTHON_FORCE_REGEN=1
+        
+        # Build source distribution first
+        python -m build --sdist
+        
+        # Build wheel with CUDA support for current Python version
+        echo "Building wheel for Python ${{ matrix.python-version }} with CUDA ${{ matrix.cuda-version }}..."
+        
+        # Show Python and build tool versions for debugging
+        python --version
+        python -c "import sys; print('Python executable:', sys.executable)"
+        python -m pip list | grep -E "(build|wheel|setuptools|Cython)"
+        
+        # Use build instead of pip wheel for better control (with verbose output)
+        python -m build --wheel --verbose 2>&1 | tee build.log
+        
+        # Check if wheel was created
+        if ls dist/*.whl 1> /dev/null 2>&1; then
+          echo "✅ Wheel built successfully"
+          ls -la dist/
+        else
+          echo "❌ No wheel found in dist/"
+          echo "Build log contents:"
+          cat build.log
+          exit 1
+        fi
+        
+        # Verify wheel was built with CUDA and correct Python version
+        echo "Verifying wheel contents..."
+        python -m wheel unpack dist/*.whl -d /tmp/wheel_check/
+        
+        # Check Python version in extension names
+        EXPECTED_PYTHON="cp$(echo ${{ matrix.python-version }} | sed 's/\.//')"
+        echo "Expected Python tag: $EXPECTED_PYTHON"
+        
+        # List all .so files and check Python version
+        echo "Built extensions:"
+        find /tmp/wheel_check/ -name "*.so" | while read so_file; do
+          echo "  $so_file"
+          if [[ "$so_file" == *"$EXPECTED_PYTHON"* ]]; then
+            echo "    ✅ Correct Python version"
+          else
+            echo "    ⚠️ Unexpected Python version in filename"
+          fi
+        done
+        
+        # Check for CUDA objects in wheel
+        if find /tmp/wheel_check/ -name "*.so" -exec file {} \; | grep -i cuda; then
+          echo "✅ CUDA extensions found in wheel"
+        else
+          echo "⚠️ No CUDA extensions detected in wheel"
+          find /tmp/wheel_check/ -name "*.so" -exec file {} \;
+        fi
+        
+        # Verify g6k modules are present
+        echo "Checking g6k module structure:"
+        find /tmp/wheel_check/ -name "siever*.so" -o -name "siever_params*.so" | sort
+
+    - name: Add CUDA metadata to wheel
+      run: |
+        cd dist
+        # Find the built wheel
+        ORIGINAL_WHEEL=$(ls *.whl | head -n1)
+        
+        # Extract wheel components for proper CUDA tagging
+        WHEEL_BASENAME=$(basename "$ORIGINAL_WHEEL" .whl)
+        
+        # Parse wheel name to handle existing local version identifiers
+        if [[ "$WHEEL_BASENAME" =~ ^(.+)-([0-9]+\.[0-9]+.*)-(.+)-(.+)-(.+)$ ]]; then
+          PKG_NAME="${BASH_REMATCH[1]}"
+          VERSION="${BASH_REMATCH[2]}"
+          PYTHON_TAG="${BASH_REMATCH[3]}"
+          ABI_TAG="${BASH_REMATCH[4]}"
+          PLATFORM_TAG="${BASH_REMATCH[5]}"
+          
+          echo "Original version: $VERSION"
+          
+          # Check if version already has a local version identifier (contains +)
+          if [[ "$VERSION" == *"+"* ]]; then
+            # Version already has local identifier, append CUDA tag to it
+            NEW_VERSION="${VERSION}.${CUDA_TAG}"
+          else
+            # No local identifier, add CUDA tag as local identifier
+            NEW_VERSION="${VERSION}+${CUDA_TAG}"
+          fi
+          
+          NEW_WHEEL_NAME="${PKG_NAME}-${NEW_VERSION}-${PYTHON_TAG}-${ABI_TAG}-${PLATFORM_TAG}.whl"
+          
+          echo "New version: $NEW_VERSION"
+          echo "Renaming: $ORIGINAL_WHEEL -> $NEW_WHEEL_NAME"
+          
+          # Rename the wheel
+          mv "$ORIGINAL_WHEEL" "$NEW_WHEEL_NAME"
+          
+          echo "WHEEL_NAME=$NEW_WHEEL_NAME" >> $GITHUB_ENV
+        else
+          echo "Could not parse wheel name: $ORIGINAL_WHEEL"
+          echo "Using original wheel without CUDA tag"
+          echo "WHEEL_NAME=$ORIGINAL_WHEEL" >> $GITHUB_ENV
+        fi
+
+    - name: Test wheel installation and basic functionality
+      run: |
+        # Create a clean test environment
+        python -m venv test_env
+        source test_env/bin/activate
+        
+        # Upgrade pip in the venv
+        pip install --upgrade pip
+        
+        # Install the wheel with force reinstall to handle version conflicts
+        pip install --force-reinstall dist/*.whl
+        
+        # Copy test script into test environment and run it
+        cp test_imports.py test_env/
+        cd test_env
+        python test_imports.py
+
+    - name: Upload wheel artifacts
+      if: inputs.upload_wheels != false
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-py${{ matrix.python-version }}-cuda${{ matrix.cuda-version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        path: |
+          dist/*.whl
+          dist/*.tar.gz
+        retention-days: 30
+
+    - name: Upload build logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-failure-py${{ matrix.python-version }}-cuda${{ matrix.cuda-version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        path: |
+          build.log
+          /tmp/wheel_check/
+          /var/log/cuda-installer*.log
+        retention-days: 7
+        if-no-files-found: ignore
+
+  collect-wheels:
+    name: Collect all built wheels
+    runs-on: ubuntu-latest
+    needs: build-wheels
+    if: always() && (needs.build-wheels.result == 'success' || needs.build-wheels.result == 'failure')
+    
+    steps:
+    - name: Download all wheel artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: wheel-*
+        merge-multiple: true
+        path: collected_wheels/
+
+    - name: List collected wheels
+      run: |
+        echo "📦 Collected wheels:"
+        find collected_wheels/ -name "*.whl" -o -name "*.tar.gz" | sort
+
+    - name: Upload combined wheel collection
+      uses: actions/upload-artifact@v4
+      with:
+        name: all-wheels-${{ github.run_number }}-${{ github.run_attempt }}
+        path: collected_wheels/
+        retention-days: 90
+
+  publish-to-pypi:
+    name: Publish wheels to PyPI
+    runs-on: ubuntu-latest
+    needs: [build-wheels, collect-wheels]
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_pypi == true)
+    environment: pypi
+    permissions:
+      id-token: write  # For trusted publishing
+
+    steps:
+    - name: Download all wheels
+      uses: actions/download-artifact@v4
+      with:
+        name: all-wheels-${{ github.run_number }}-${{ github.run_attempt }}
+        path: dist/
+
+    - name: Verify wheels before publishing
+      run: |
+        echo "🔍 Verifying wheels before PyPI upload:"
+        find dist/ -name "*.whl" | while read wheel; do
+          echo "Checking: $(basename "$wheel")"
+          python -m zipfile -l "$wheel" | grep -E "\.(so|pyd)$" || echo "  No compiled extensions found"
+        done
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: dist/
+        verbose: true
+        print-hash: true
