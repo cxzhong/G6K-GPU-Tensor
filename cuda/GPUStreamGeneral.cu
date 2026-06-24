@@ -1398,6 +1398,28 @@ __noinline__ __device__ void save_result3(unsigned int ai, int bi)
     }
 }
 
+template<int I, int ROW_FRAGS, typename AFrag>
+__device__ __forceinline__ void copy_cached_a_frag(AFrag* dst, const float4 (&cache)[ROW_FRAGS], const int fragid)
+{
+    if constexpr (I < ROW_FRAGS) {
+        if (fragid == I) {
+            dst->w[0] = cache[I];
+        } else {
+            copy_cached_a_frag<I + 1, ROW_FRAGS>(dst, cache, fragid);
+        }
+    }
+}
+
+template<typename MatType, typename AFrag, int ROW_FRAGS>
+__device__ __forceinline__ void load_a_frag(AFrag* dst, const MatType& matrix, const float4 (&cache)[ROW_FRAGS], const int rowid, const int fragid)
+{
+    if constexpr (MatType::row_frags >= 3) {
+        copy_cached_a_frag<0, ROW_FRAGS>(dst, cache, fragid % MatType::row_frags);
+    } else {
+        matrix.loadc_frag(dst, rowid, fragid);
+    }
+}
+
 // input a must be using half (fp16), of size 16 m x 16 k x cudablocks for integers m and k,
 // Assume lengths are precomputed as 1/2 * ||x||^2 - 1/4 * lenbound
 // Assume ips are precomputed as 1/4 * lenbound - 1/2 * ||x||^2 - 1/4 * ||z||^2 + <x,z>
@@ -1423,9 +1445,12 @@ void kernel_triple_sieve(half* a, const half* len, const half* ips, const uint32
     constexpr int w_cache_per_warp = (w_frags_per_warp * w_warps_per_block) / warps_per_block;
     static_assert((h_frags_per_warp*h_warps_per_block)%warps_per_block==0, "Col frags should be multiple of warps");
     static_assert((w_frags_per_warp*w_warps_per_block)%warps_per_block==0, "Row frags should be multiple of warps");
+    static_assert(h_cache_per_warp == 1, "A-fragment cache assumes one A rowblock per warp");
+    static_assert(frag_traits::afrag_float4_size == 1, "A-fragment cache assumes one float4 per thread");
 
     constexpr int astep = 16 * h_frags_per_warp * h_warps_per_block;
     constexpr int bstep = 16 * w_frags_per_warp * w_warps_per_block;
+    constexpr int cached_a_frags = (mat_type::row_frags >= 3) ? mat_type::row_frags : 1;
 
     int aid = blockIdx.x * astep;
     assert( aid < bucketsize );
@@ -1448,6 +1473,7 @@ void kernel_triple_sieve(half* a, const half* len, const half* ips, const uint32
     static_assert(B==2);
 
     // Cache regs, Load from Global, write to Shared
+    float4 cached_afrags[cached_a_frags];
     frag_traits::afrag_u afrags_cache[B][h_cache_per_warp];
     frag_traits::bfrag_u bfrags_cache[B][w_cache_per_warp];
 
@@ -1479,6 +1505,15 @@ void kernel_triple_sieve(half* a, const half* len, const half* ips, const uint32
             continue;
         int bid = b_start;
 
+        if constexpr (mat_type::row_frags >= 3) {
+            #pragma unroll
+            for( int r = 0; r < mat_type::row_frags; r++ ) {
+                frag_traits::afrag_u afrag;
+                matrix.loadc_frag(&afrag, aid + 16 * warpid, r);
+                cached_afrags[r] = afrag.w[0];
+            }
+        }
+
         a_data_cache.global_to_shared_rows( data_len, a_shared_len, aid );    
         a_data_cache.global_to_shared_rows( data_ips, a_shared_ips, aid );
         b_data_cache.global_to_shared_rows( data_len, b_shared_len, bid );    
@@ -1489,7 +1524,7 @@ void kernel_triple_sieve(half* a, const half* len, const half* ips, const uint32
         for( int i = 1; i < B; i++ ) {
             #pragma unroll
             for( int j = 0; j < h_cache_per_warp; j++ ) 
-               matrix.loadc_frag(&(afrags_cache[i][j]), aid + 16 * (warps_per_block*j+warpid), 0); 
+               load_a_frag(&(afrags_cache[i][j]), matrix, cached_afrags, aid + 16 * (warps_per_block*j+warpid), 0);
             
             #pragma unroll
             for( int j = 0; j < w_cache_per_warp; j++ )
@@ -1509,7 +1544,7 @@ void kernel_triple_sieve(half* a, const half* len, const half* ips, const uint32
         for( int i = 0; i < B; i++ ) {
             #pragma unroll
             for( int j = 0; j < h_cache_per_warp; j++ ) 
-               matrix.loadc_frag(&(afrags_cache[i][j]), aid + 16 * (warps_per_block*j+warpid), i+1); 
+               load_a_frag(&(afrags_cache[i][j]), matrix, cached_afrags, aid + 16 * (warps_per_block*j+warpid), i+1);
             
             #pragma unroll
             for( int j = 0; j < w_cache_per_warp; j++ )
@@ -1560,7 +1595,7 @@ void kernel_triple_sieve(half* a, const half* len, const half* ips, const uint32
                 for( int i = 0; i < B; i++ ) {
                     #pragma unroll
                     for( int j = 0; j < h_cache_per_warp; j++ ) 
-                       matrix.loadc_frag(&(afrags_cache[i][j]), aid + 16 * (warps_per_block*j+warpid), (r+i+3)%matrix.row_frags); 
+                       load_a_frag(&(afrags_cache[i][j]), matrix, cached_afrags, aid + 16 * (warps_per_block*j+warpid), (r+i+3)%matrix.row_frags);
                     
                     if( r+i+3 == matrix.row_frags )
                         bid += bstep;
