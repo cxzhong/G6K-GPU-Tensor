@@ -3,6 +3,7 @@
 
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
+import importlib.util
 import subprocess
 import os
 import sys
@@ -337,7 +338,13 @@ def load_rebuild_config():
     }
     
     try:
-        import compile_config
+        config_path = os.environ.get('G6K_COMPILE_CONFIG')
+        if config_path:
+            spec = importlib.util.spec_from_file_location('g6k_compile_config', config_path)
+            compile_config = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(compile_config)
+        else:
+            import compile_config
         rebuild_config = compile_config.REBUILD_CONFIG
         config.update(rebuild_config)
         print(f"Using rebuild.sh configuration: MAX_SIEVING_DIM={config['MAX_SIEVING_DIM']}")
@@ -345,6 +352,15 @@ def load_rebuild_config():
         print("No rebuild.sh configuration found, using defaults")
     
     return config
+
+def cuda_paths(cuda_path):
+    """Return CUDA include/lib/stub paths for regular and conda layouts."""
+    cuda_root = Path(cuda_path)
+    target = cuda_root / "targets" / f"{os.uname().machine}-linux"
+    include_dir = target / "include" if (target / "include").exists() else cuda_root / "include"
+    library_dir = target / "lib" if (target / "lib").exists() else cuda_root / "lib64"
+    stub_dir = library_dir / "stubs"
+    return str(include_dir), str(library_dir), str(stub_dir)
 
 def compile_cuda_objects(config=None):
     """Compile CUDA objects if CUDA is available."""
@@ -366,6 +382,13 @@ def compile_cuda_objects(config=None):
         max_sieving_dim = config.get('MAX_SIEVING_DIM', 128)
         gpuvecnum = config.get('GPUVECNUM', 65536)
         cuda_path = config.get('CUDA_PATH', '/usr/local/cuda')
+        cuda_include_dir, _, _ = cuda_paths(cuda_path)
+        cuda_defines = [flag for flag in config.get('EXTRAFLAGS', '').split()
+                        if flag.startswith('-D')]
+        for flag in (f'-DMAX_SIEVING_DIM={max_sieving_dim}',
+                     f'-DGPUVECNUM={gpuvecnum}', '-DHAVE_CUDA'):
+            if flag not in cuda_defines:
+                cuda_defines.append(flag)
         
         nvcc_cmd = [
             f'{cuda_path}/bin/nvcc',
@@ -379,9 +402,7 @@ def compile_cuda_objects(config=None):
             '-Xcompiler', '-pthread',
             '-Xcompiler', '-Wall',
             '-Xcompiler', '-Wextra',
-            '-Xcompiler', f'-DMAX_SIEVING_DIM={max_sieving_dim}',
-            '-Xcompiler', f'-DGPUVECNUM={gpuvecnum}',
-            '-Xcompiler', '-DHAVE_CUDA',
+            *cuda_defines,
             '-std=c++17',
             '-O3',
             '--use_fast_math',
@@ -390,8 +411,8 @@ def compile_cuda_objects(config=None):
             '-gencode', 'arch=compute_89,code=sm_89',
             '-gencode', 'arch=compute_89,code=compute_89',
             '-lineinfo',
-            f'-I{cuda_path}/include',
-            '-I../parallel-hashmap',
+            f'-I{cuda_include_dir}',
+            '-Iparallel-hashmap',
             '-c', cuda_src_path,
             '-o', cuda_obj_path
         ]
@@ -447,6 +468,7 @@ def get_ext_modules():
                 build_cuda = False
         
         print(f"Building G6K GPU Tensor extensions (CUDA: {'enabled' if build_cuda else 'disabled'})")
+        cuda_include_dir, cuda_library_dir, cuda_stub_dir = cuda_paths(config.get('CUDA_PATH', '/usr/local/cuda'))
         
         # Add cysignals include directory
         cysignals_include = None
@@ -458,8 +480,8 @@ def get_ext_modules():
 
         include_dirs = [
             'kernel',
+            'parallel-hashmap',
             numpy.get_include(),
-            '/usr/include'
         ]
         
         if cysignals_include:
@@ -468,7 +490,7 @@ def get_ext_modules():
         if build_cuda:
             include_dirs.extend([
                 'cuda',
-                '/usr/local/cuda/include'
+                cuda_include_dir
             ])
 
         # Build main siever extension
@@ -493,13 +515,11 @@ def get_ext_modules():
             extra_link_args.append(cuda_obj_path)
             # Add CUDA-specific linker flags
             extra_link_args.extend([
-                '-L/usr/local/cuda/lib64',
+                f'-L{cuda_library_dir}',
                 '-L/usr/lib/wsl/lib', 
-                '-L/usr/local/cuda/targets/x86_64-linux/lib',
-                '-L/usr/local/cuda/lib64/stubs',
-                '-Wl,-rpath,/usr/local/cuda/lib64',
+                f'-L{cuda_stub_dir}',
+                f'-Wl,-rpath,{cuda_library_dir}',
                 '-Wl,-rpath,/usr/lib/wsl/lib',
-                '-Wl,-rpath,/usr/local/cuda/targets/x86_64-linux/lib',
                 '-lcudart',
                 '-lcuda',
                 '-lcublas',
@@ -513,10 +533,9 @@ def get_ext_modules():
         if build_cuda:
             libraries.extend(['cuda', 'cudart', 'cublas', 'curand'])
             library_dirs.extend([
-                '/usr/local/cuda/lib64',
+                cuda_library_dir,
                 '/usr/lib/wsl/lib',
-                '/usr/local/cuda/targets/x86_64-linux/lib',
-                '/usr/local/cuda/lib64/stubs'
+                cuda_stub_dir
             ])
 
         # Define macros from configuration
@@ -551,9 +570,8 @@ def get_ext_modules():
         runtime_library_dirs = []
         if build_cuda:
             runtime_library_dirs.extend([
-                '/usr/local/cuda/lib64',
+                cuda_library_dir,
                 '/usr/lib/wsl/lib',
-                '/usr/local/cuda/targets/x86_64-linux/lib'
             ])
 
         ext_modules.append(Extension(

@@ -233,6 +233,7 @@ REBUILD_CONFIG = {
     'CUDA_LIBS': '${CUDA_LIBS}'
 }
 EOF
+export G6K_COMPILE_CONFIG="$(pwd)/compile_config.py"
 
 echo "Building G6K with MAX_SIEVING_DIM=${maxsievingdim}, GPUVECNUM=${gpuvecnum}"
 echo "Extra flags: ${EXTRAFLAGS}"
@@ -241,10 +242,10 @@ echo "CUDA enabled: ${HAVE_CUDA}"
 # Use modern pip-based build system
 if [ -n "${VIRTUAL_ENV}" ]; then
     echo "Using virtual environment: ${VIRTUAL_ENV}"
-    pip install -e . --force-reinstall --no-deps || exit 1
+    pip install -e . --force-reinstall --no-deps --no-build-isolation || exit 1
 else
     echo "No virtual environment detected. Installing globally with pip..."
-    pip install -e . --force-reinstall --no-deps || exit 1
+    pip install -e . --force-reinstall --no-deps --no-build-isolation || exit 1
 fi
 
 echo "Build completed successfully!"
